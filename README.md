@@ -13,7 +13,7 @@ Usage is quite similar to that of amdpwrman.
 Usage:
 
 ```
-gpumgr 0.01a    (C) 2022 Jai B. (Shaped Technologies)           GPLv3 License
+gpumgr 0.02a    (C) 2022 Jai B. (Shaped Technologies)           GPLv3 License
 
 gpumgr shows statistics and manipulates power limit settings for GPUs on Linux
 through various interfaces provided by manufacturer's drivers, for example,

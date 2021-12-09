@@ -18,7 +18,7 @@ const fsp = require("fs").promises;
 const websocketHandler = require("./websocketHandler.js");
 
 const $me = `gpumgr`;
-const $version = `0.01a`;
+const $version = `0.02a`;
 const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 const $license = `GPLv3 License`;
 
@@ -187,12 +187,22 @@ Examples:
 
 		switch (gpu) {
 			case 'all':
+				for (gpu of this.GPUs) this.showStatus(gpu.gpu);
 			  break;
 			case 'nvidia':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'nvidia')
+						this.showStatus(gpu.gpu);
 			  break;
 			case 'amd':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'amd')
+						this.showStatus(gpu.gpu);
 			  break;
 			case 'intel':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'intel')
+						this.showStatus(gpu.gpu);
 			  break;
 			default:
 				gpu = (Number.isInteger(parseInt(gpu))) ? process.argv[3] : 0;
@@ -667,8 +677,7 @@ GPU${gpu}: Power limit is ${this.GPUs[gpu].powerLimitWatts} watts (Min: ${this.G
 GPU${gpu}: Power usage is ${this.GPUs[gpu].powerUsageWatts} watts (${this.GPUs[gpu].powerUsage} mW)
 GPU${gpu}: Voltage is currently ${this.GPUs[gpu].vddgfx} mV (${this.GPUs[gpu].vddgfx/1000} V)
 GPU${gpu}: Fan speed for is ${this.GPUs[gpu].fan.percent}% (${this.GPUs[gpu].fan.rpm} RPM, Min: ${this.GPUs[gpu].fan.rpm_min} RPM - Max: ${this.GPUs[gpu].fan.rpm_max} RPM)
-GPU${gpu}: Fan control is set to ${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fan.mode == 'automatic')?"(target: "+this.GPUs[gpu].fan.target+" RPM)":''}
-`;
+GPU${gpu}: Fan control is set to ${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fan.mode == 'automatic')?"(target: "+this.GPUs[gpu].fan.target+" RPM)":''}`;
 
 		console.log(statusTemplate);
 	}
