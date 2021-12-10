@@ -1,12 +1,12 @@
-/*
- * FreeForm Logger
- */ 
+/* FreeForm Logger (C) 2022 Jai B */ 
 "use strict";
 
 class logger {
-    constructor() {
-    	this.hrStart = process.hrtime();
+    constructor(_parent) {
+        this.parent = _parent;
+    	this.hrStart = process.hrtime.bigint();
         this.logStore = [];
+        this.stdout = true;
     }
 
     get count() {
@@ -17,18 +17,33 @@ class logger {
     	this.log(message);
     }
 
+    divertToFile() {
+        this.stdout = !this.stdout;
+    }
+
+    writeToFile(message) {
+        fs.appendFileSync(this.parent.logFile, message + '\n');
+    }
+
     log(message) {
         const timestamp = new Date().toISOString();
 
-        const hrDiff = process.hrtime(this.hrStart);;
+        const hrDiff = process.hrtime.bigint(this.hrStart);
 
-        const profileTime = `${hrDiff[0] +'.'+ hrDiff[1]} S`;
+        let num = Number(hrDiff - this.hrStart);
+        let seconds = num / 1000000000;
 
-        console.log(`[${timestamp} | ${profileTime}] ${message}`);
+        const profileTime = `${seconds.toFixed(4)}s`;
 
-  		//console.log('Execution time (hr): %ds %dms', hrDiff[0], hrDiff[1] / 1000000)
+        const msg = `[${process.pid}: ${timestamp} | ${profileTime}] ${message}`;
 
+        if (this.stdout)
+            console.log(msg);
+        else
+            this.writeToFile(msg);
     }
 };
 
-module.exports = new logger();
+module.exports = (p) => {
+    return new logger(p);
+}

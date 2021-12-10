@@ -10,10 +10,17 @@
 
 "use strict";
 
-global.logger = require("./logger.js");
 
-const exec = require("child_process").exec;
-const fsp = require("fs").promises;
+const util = require('util');
+const child = require('child_process');
+
+const exec = util.promisify(require('child_process').exec);
+
+//const xmlconvert = require('xml-js');
+const xmlParser = require('xml2json');
+
+global.fsp = require('fs').promises;
+global.fs = require('fs');
 
 const websocketHandler = require("./websocketHandler.js");
 
@@ -25,6 +32,8 @@ const $license = `GPLv3 License`;
 class gpuManager {
 	constructor() {
 		this.GPUs = [];
+		this.logFile = 'gpumgr.log';
+		global.logger = require("./logger.js")(this);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
@@ -32,9 +41,68 @@ class gpuManager {
 	}
 
 	async initialize() {
-		logger.log(`gpumgr ${$version} starting`);
-
+		this.handleArgumentsEarly();
 		this.handleArguments();
+	}
+
+	handleArgumentsEarly() {
+		switch (process.argv[2]) {
+			case 'start':
+			case 'stop':
+			case '__child':
+				logger.divertToFile();
+			  break;
+			default:
+		};
+	}
+
+	async handleArguments() {
+		if (process.argv[2] != 'start') {
+			logger.log(`gpumgr ${$version} starting..`)
+		}
+
+		if (process.argv[2] != 'help'
+		&& process.argv[2] != '-h'
+		&& process.argv[2] != '--help') {
+			await this.enumerateGPUs();
+		} 
+
+		switch (process.argv[2]) {
+			case '-h':
+			case '--help':
+			case 'help':
+			case 'usage':
+			case 'wtf':
+				this.showUsage()
+			  break;
+			case 'show':
+				this.handleShowStatus();
+			  break;
+			case 'start':
+				this.startDaemon();
+				logger.divertToFile();
+				await logger.log(`gpumgr ${$version} daemon started`)
+				process.exit();
+			  break;
+			case '__child':
+				process.on('beforeExit', this.beforeChildExit.bind(this));
+				process.on('exit', this.handleChildExit.bind(this));
+				await this.enumerateGPUs();
+			  break;
+			default:
+				console.log(`Command line argument not understood: '${process.argv[2]}'`);
+				this.showUsage()
+		}
+	}
+
+	// no async code here! not even with await!
+	beforeChildExit(code) {
+		logger.log(`gpumgr daemon shutting down..`);
+	}
+
+	handleChildExit(code) {
+		logger.log(`gpumgr daemon exiting.`);
+		process.exit();
 	}
 
 	showUsage() {
@@ -112,28 +180,6 @@ Examples:
 		console.log(usageTemplate);
 	}
 
-	async handleArguments() {
-		if (process.argv[2] != 'help'
-		&& process.argv[2] != '-h'
-		&& process.argv[2] != '--help') await this.enumerateGPUs();
-
-		switch (process.argv[2]) {
-			case '-h':
-			case '--help':
-			case 'help':
-			case 'usage':
-			case 'wtf':
-				this.showUsage()
-			  break;
-			case 'show':
-				this.handleShowStatus();
-			  break;
-			default:
-				console.log(`Command line argument not understood: '${process.argv[2]}'`);
-				this.showUsage()
-		}
-	}
-
 	async enumerateGPUs() {
 		logger.log(`Enumerating GPUs..`);
 		let entries = await fsp.readdir(`/sys/class/drm`);
@@ -143,7 +189,10 @@ Examples:
 		for (let card of entries) {
 			let gpu = card.substr(4,1);
 
-			let pcidevice = await this.getPCIDevice(gpu);
+			let fullpcidevice = await this.getFullPCIDevice(gpu);
+			let almostfullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-11);
+			fullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-9);
+			let pcidevice = fullpcidevice.substr(-7,7);
 
 			let vendorid = await this.getPCIVendorID(gpu);
 			let deviceid = await this.getPCIDeviceID(gpu);
@@ -152,14 +201,21 @@ Examples:
 			let subdeviceid = await this.getPCISubDeviceID(gpu);
 
 			let vendorName = 'unknown';
+
 			let hwmon = 'unknown';
+			let nv = 'unknown';
 
 			switch(vendorid) {
 				case `1002`: 
 					hwmon = await this.getHWMon(gpu);
 					vendorName = 'amd';
 				  break;
-				case `10de`: vendorName = 'nvidia'; break;
+				case `10de`:
+					vendorName = 'nvidia';
+					let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);
+					//let result = xmlconvert.xml2json(nvidiaQuery.stdout);
+					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
+				  break;
 				case `8086`: vendorName = 'intel'; break;
 			}
 
@@ -168,6 +224,8 @@ Examples:
 			let GPU = {
 				gpu: gpu,
 				card: card,
+				fullpcidevice: fullpcidevice,
+				almostfullpcidevice: almostfullpcidevice,
 				pcidevice: pcidevice,
 				vendorid: vendorid,
 				vendorName: vendorName,
@@ -177,7 +235,8 @@ Examples:
 			};
 
 			if (hwmon != 'unknown') GPU.hwmon = hwmon;
-
+			if (nv != 'unknown') GPU.nv = nv;
+			
 			this.GPUs.push(GPU);
 		};
 	}
@@ -216,7 +275,7 @@ Examples:
 		return ret[0];
 	}
 
-	async getPCIDevice(gpu) { return (await fsp.readlink(`/sys/class/drm/card${gpu}/device`)).substr(-7,7); }
+	async getFullPCIDevice(gpu) { return (await fsp.readlink(`/sys/class/drm/card${gpu}/device`)); }
 	
 	async getIRQNumber(gpu) { return (await fsp.readFile(`/sys/class/drm/card${gpu}/device/irq`, `utf8`)).trim(); }
 
@@ -257,7 +316,11 @@ Examples:
 			case 'amd':
 				mem_used = (await fsp.readFile(`/sys/class/drm/card${gpu}/device/mem_info_vram_used`, `utf8`)).trim();
 			  break;
-		}
+			case 'nvidia':
+				mem_used = this.GPUs[gpu].nv.nvidia_smi_log.gpu.fb_memory_usage.used;
+				mem_used = mem_used.substr(0,mem_used.length-4);
+				mem_used = mem_used * 1000 * 1000;
+			  break;		}
 		return mem_used;
 	}
 
@@ -266,6 +329,11 @@ Examples:
 		switch (this.GPUs[gpu].vendorName) {
 			case 'amd':
 				mem_total = (await fsp.readFile(`/sys/class/drm/card${gpu}/device/mem_info_vram_total`, `utf8`)).trim();
+			  break;
+			case 'nvidia':
+				mem_total = this.GPUs[gpu].nv.nvidia_smi_log.gpu.fb_memory_usage.total;
+				mem_total = mem_total.substr(0,mem_total.length-4);
+				mem_total = mem_total * 1000 * 1000;
 			  break;
 		}
 		return mem_total;
@@ -277,6 +345,10 @@ Examples:
 			case 'amd':
 				temperature = (await fsp.readFile(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/temp1_input`, `utf8`)).trim();
 				temperature = (temperature/1000).toFixed(1);
+			  break;
+			case 'nvidia':
+				temperature = this.GPUs[gpu].nv.nvidia_smi_log.gpu.temperature.gpu_temp;
+				temperature = temperature.substr(0,temperature.length-2);
 			  break;
 		}
 		return temperature;
@@ -576,23 +648,23 @@ Examples:
 
 		this.GPUs[gpu].memUsedMB =
 			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memUsed/1024/1024).toFixed(1) : 'unknown';
+				(this.GPUs[gpu].memUsed/1000/1000).toFixed(1) : 'unknown';
 
 		this.GPUs[gpu].memFreeMB =
 			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memFree/1024/1024).toFixed(1) : 'unknown';
+				(this.GPUs[gpu].memFree/1000/1000).toFixed(1) : 'unknown';
 
 		this.GPUs[gpu].memTotalMB =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memTotal/1024/1024).toFixed(1) : 'unknown';
+			(this.GPUs[gpu].memTotal != 'unknown') ?
+				(this.GPUs[gpu].memTotal/1000/1000).toFixed(1) : 'unknown';
 		
 		this.GPUs[gpu].memUsedPercent =
 			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal).toFixed(2) : 'unknown';
+				((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100).toFixed(2) : 'unknown';
 
 		this.GPUs[gpu].memFreePercent =
 			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(100 - (this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal)).toFixed(2) : 'unknown';
+				(100 - ((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100)).toFixed(2) : 'unknown';
 
 		this.GPUs[gpu].gpu_temperatureC = await this.getGPUCoreTemperature(gpu);
 		this.GPUs[gpu].gpu_temperatureF = ((9/5) * this.GPUs[gpu].gpu_temperatureC) + 32;
@@ -663,9 +735,9 @@ GPU${gpu}: Sub-Vendor ID: 0x${this.GPUs[gpu].subvendorid} / ${this.GPUs[gpu].sub
 GPU${gpu}: Sub-Device ID: 0x${this.GPUs[gpu].subdeviceid} / ${this.GPUs[gpu].subdevicename}
 GPU${gpu}: Current GPU Usage is ${this.GPUs[gpu].gpu_busy}%
 GPU${gpu}: Current VRAM Activity is ${this.GPUs[gpu].mem_busy}%
-GPU${gpu}: VRAM Total: ${this.GPUs[gpu].memTotalMB} MB (${this.GPUs[gpu].memTotal} bytes)
-GPU${gpu}: VRAM Used: ${this.GPUs[gpu].memUsedPercent}% used ${this.GPUs[gpu].memUsedMB} MB (${this.GPUs[gpu].memUsed} bytes)
-GPU${gpu}: VRAM Free: ${this.GPUs[gpu].memFreePercent}% free ${this.GPUs[gpu].memFreeMB} MB (${this.GPUs[gpu].memFree} bytes)
+GPU${gpu}: VRAM Total: ${this.GPUs[gpu].memTotalMB} MiB (${this.GPUs[gpu].memTotal} bytes)
+GPU${gpu}: VRAM Used: ${this.GPUs[gpu].memUsedPercent}% used ${this.GPUs[gpu].memUsedMB} MiB (${this.GPUs[gpu].memUsed} bytes)
+GPU${gpu}: VRAM Free: ${this.GPUs[gpu].memFreePercent}% free ${this.GPUs[gpu].memFreeMB} MiB (${this.GPUs[gpu].memFree} bytes)
 GPU${gpu}: Temperature is ${this.GPUs[gpu].gpu_temperatureC} deg. C (${this.GPUs[gpu].gpu_temperatureF} deg. F)
 GPU${gpu}: Current GPU core speed is ${this.GPUs[gpu].gpu_mhz} mHz
 GPU${gpu}: Current memory speed is ${this.GPUs[gpu].mem_mhz} mHz
@@ -673,7 +745,7 @@ GPU${gpu}: Available GPU clocks ${this.GPUs[gpu].gpuClocksPrintable}
 GPU${gpu}: Available Memory clocks ${this.GPUs[gpu].memoryClocksPrintable}
 GPU${gpu}: Current GPU Profile: ${this.GPUs[gpu].gpuClockProfile} @ ${this.GPUs[gpu].gpuProfileMhz} mHz (${this.GPUs[gpu].gpu_mhz} mHz actual)
 GPU${gpu}: Current Memory Profile: ${this.GPUs[gpu].memoryClockProfile} @ ${this.GPUs[gpu].memoryProfileMhz} mHz (${this.GPUs[gpu].mem_mhz} mHz actual)
-GPU${gpu}: Power limit is ${this.GPUs[gpu].powerLimitWatts} watts (Min: ${this.GPUs[gpu].powerLimitMinWatts}w - Max: ${this.GPUs[gpu].powerLimitMaxWatts}w)
+GPU${gpu}: Power limit is ${this.GPUs[gpu].powerLimitWatts} watts (Min: ${this.GPUs[gpu].powerLimitMinWatts} watts - Max: ${this.GPUs[gpu].powerLimitMaxWatts} watts)
 GPU${gpu}: Power usage is ${this.GPUs[gpu].powerUsageWatts} watts (${this.GPUs[gpu].powerUsage} mW)
 GPU${gpu}: Voltage is currently ${this.GPUs[gpu].vddgfx} mV (${this.GPUs[gpu].vddgfx/1000} V)
 GPU${gpu}: Fan speed for is ${this.GPUs[gpu].fan.percent}% (${this.GPUs[gpu].fan.rpm} RPM, Min: ${this.GPUs[gpu].fan.rpm_min} RPM - Max: ${this.GPUs[gpu].fan.rpm_max} RPM)
@@ -705,6 +777,7 @@ GPU${gpu}: Fan control is set to ${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fa
 	}
 
 	async startDaemon() {
+		this.childProcess = child.fork(__filename, ['__child'], {detached:true});
 	}
 
 	async stopDaemon() {
