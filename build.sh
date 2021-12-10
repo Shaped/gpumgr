@@ -31,21 +31,77 @@ else
 			echo
 			read -r -p "Are you sure you want to continue? [y/N] " response
 			case "$response" in
-				[yY][eE][sS]|[yY]) 
+				[yY][eE][sS]|[yY])
+					echo
+					echo "Old src/gpumgr.js:"
+					echo
+					head -9 src/gpumgr.js
+
+					sleep 1
+
+					echo
 					echo "Updating version number to v$2 in src/gpumgr.js.."
 					sed -i '0,/const $version = `.*`;/{s/const $version = `.*`;/const $version = `'$2'`;/}' src/gpumgr.js
 					sed -i '0,/	gpumgr v[0-9]/{s/	gpumgr v[0-9].*/	gpumgr v'$2'/}' src/gpumgr.js
-					
+
+					echo
+					echo "New src/gpumgr.js:"
+					echo
+					head -9 src/gpumgr.js
+
+					sleep 1
+
+					echo
+					echo "Old package.json:"
+					echo "const fs = require('fs'); const util = require('util'); console.log(JSON.parse(fs.readFileSync('package.json','utf8')));" | node -
+					echo
+
+					sleep 1
+
+					echo "Updating version numer to v$2 in package.json.."
+					sed -i 's/\t"version": ".*/\t"version": "'$2'",/' package.json
+
+					echo
+					echo "New package.json:"
+					echo "const fs = require('fs'); const util = require('util'); console.log(JSON.parse(fs.readFileSync('package.json','utf8')));" | node -
+					echo
+
+					sleep 1
+
 					echo "Building for release v$2.."
 					./build.sh
 
+					echo
+					echo "Old docs/README.md:"
+					echo
+					head -1 docs/README.md
+
+					sleep 1
+
+					echo
 					echo "Updating version number in docs/README.md to v$2"
 					sed -i '{s/gpumgr v[0-9].*/gpumgr v'$2'/}' docs/README.md
 
-					echo "Creating github README.md with changes/todo appended in project root"
+					echo
+					echo "New docs/README.md:"
+					echo
+					head -1 docs/README.md
+
+					sleep 1
+
+					echo
+					echo "Creating GitHub README.md with changes/todo appended in project root"
+					#TODO: Automatically add usage to docs/README.md somehow
 					cat docs/README.md > README.md
 					cat docs/CHANGELOG.md >> ./README.md
 					cat docs/TODO.md >> ./README.md
+
+					echo
+					echo "Generated GitHub README.md:"
+					echo
+					cat README.md
+					
+					sleep 1
 
 					echo
 					echo "Creating source release gzip in release/"

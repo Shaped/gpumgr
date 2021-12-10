@@ -1,6 +1,6 @@
 #!/usr/bin/node
 /* 
-	gpumgr v0.05a
+	gpumgr v0.0.6-alpha
 	(C) 2022 Shaped Technologies
 
 	gpumgr is based on amdpwrman which was originally only for amdgpus
@@ -25,7 +25,7 @@ const websocketHandler = require("./websocketHandler.js");
 
 //const $me = (path.basename(process.argv[1]) == "gpumgr.js") ? 'gpumgr' : path.basename(process.argv[1]);
 const $me = path.basename(process.argv[1]);
-const $version = `0.05a`;
+const $version = `0.0.6-alpha`;
 const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 const $license = `GPLv3 License`;
 

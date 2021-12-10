@@ -2,7 +2,7 @@
 	"bin": {
 		"gpumgr": "src/gpumgr.js"
 	},
-	"version": "0.0.5-alpha",
+	"version": "0.0.6-alpha",
 	"name": "gpumgr",
 	"license": "GPL-3.0-or-later",
 	"readme": "README.md",
