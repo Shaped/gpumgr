@@ -1,13 +1,18 @@
 {
-  "bin": {
-	"gpumgr":"src/gpumgr.js"
-  },
-  "version" : "0.02a",
-  "name" : "gpumgr",
-  "license" : "GPL-3.0-or-later",
-  "pkg" : {
-	"assets": "src/**/*",
-	"targets": ["node10-linux-x64"],
-	"outputPath": "bin"
-  }
+	"bin": {
+		"gpumgr": "src/gpumgr.js"
+	},
+	"version": "0.0.5-alpha",
+	"name": "gpumgr",
+	"license": "GPL-3.0-or-later",
+	"readme": "README.md",
+	"pkg": {
+		"targets": [
+			"node10-linux-x64"
+		],
+		"outputPath": "bin"
+	},
+	"dependencies": {
+		"xml2json": "^0.12.0"
+	}
 }
