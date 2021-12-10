@@ -817,8 +817,10 @@ Usage:
   ${$me} fan disable <gpu>		Disable manual fan control for <gpu>
   ${$me} fan [percent] <gpu>		Set <gpu>'s fan speed to <percent>
   ${$me} start <options>		Starts the gpumgr background service
-  ${$me} restart			Restarts the gpumgr background service
+  ${$me} restart			Soft Restarts the gpumgr background service
   ${$me} stop 				Stops the gpumgr background service
+  ${$me} force restart			Fully Restarts the gpumgr background service
+  ${$me} force stop 			Kills the gpumgr background service
 
 Options for Commands with Options:
 
