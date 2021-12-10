@@ -1,6 +1,6 @@
 {
   "bin": {
-	"gpumgr":"src/app.js"
+	"gpumgr":"src/gpumgr.js"
   },
   "version" : "0.02a",
   "name" : "gpumgr",
