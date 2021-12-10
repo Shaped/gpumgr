@@ -58,7 +58,7 @@ for your GPUs at http://127.0.0.1:1969 - or on whatever port you specified.
 
 Usage:
 
-  gpumgr [command] <gpu> <options>
+  gpumgr.js [command] <gpu> <options>
 
   If <gpu> is omitted from any command, GPU0 is assumed.
 
@@ -80,30 +80,33 @@ Usage:
         fan enable <gpu>                Enable manual fan control for <gpu>.
         fan disable <gpu>               Disable manual fan control for <gpu>.
         fan [percent] <gpu>             Set <gpu>'s fan speed to <percent>.
-        start <options>                 Starts the gpumgr service.
-        restart                         Soft Restarts the gpumgr service.
-        stop                            Stops the gpumgr service.
-        force restart                   Fully Restarts the gpumgr service.
-        force stop                      Kills the gpumgr service.
+        start <options>                 Starts the gpumgr.js service.
+        restart                         Soft Restarts the gpumgr.js service.
+        stop                            Stops the gpumgr.js service.
+        force restart                   Fully Restarts the gpumgr.js service.
+        force stop                      Kills the gpumgr.js service.
 
-Options for Commands with Options:
+  Options for Commands with Options:
 
-        start                           Starts the gpumgr background service.
+    [any]                               Any command with color output
 
-  Options for 'start':
-    --port <number>                     Set which ipv4 port to listen on.
+      -g | --no-colors                  Disable ANSI Color formatting
+
+    start                               Starts the gpumgr.js background service.
+
+      --port <number>                   Set which ipv4 port to listen on.
                                         (eg. 1969, default is 4242)
-    --host <ip>                         Set which ipv4 host to listen on.
+      --host <ip>                       Set which ipv4 host to listen on.
                                         (eg. 0.0.0.0 or 127.0.0.1)
 
 Examples:
 
-  gpumgr show nvidia                    Show status of all Nvidia GPUs
-  gpumgr list Intel                     List all Intel GPU#s
-  sudo gpumgr fan enable 0              Enable manual fan control for GPU0
-  sudo gpumgr fan disable all           Enable auto fan control for all GPUs
-  sudo gpumgr fan 100% 0                Set GPU0 fan speed to 100%
-  sudo gpumgr start --port 4200         Start the background service on port 4200
+  gpumgr.js show nvidia                 Show status of all Nvidia GPUs
+  gpumgr.js list Intel                  List all Intel GPU#s
+  sudo gpumgr.js fan enable 0           Enable manual fan control for GPU0
+  sudo gpumgr.js fan disable all        Enable auto fan control for all GPUs
+  sudo gpumgr.js fan 100% 0             Set GPU0 fan speed to 100%
+  sudo gpumgr.js start --port 4200      Start the background service on port 4200
 ```
 ### CHANGELOG.md
 

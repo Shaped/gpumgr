@@ -1273,18 +1273,17 @@ Usage:
 	force restart            	Fully Restarts the ${$me} service.
 	force stop               	Kills the ${$me} service.
 
-Options for Commands with Options:
+  Options for Commands with Options:
+  
+    [any]                         	Any command with color output
+    
+      -g | --no-colors             	Disable ANSI Color formatting
 
-	[any]
+    start 				Starts the ${$me} background service.
 
-	-g | --no-colors        Disable ANSI Color formatting
-
-	start 				Starts the ${$me} background service.
-
-  Options for 'start':
-    --port <number>			Set which ipv4 port to listen on.
+      --port <number>			Set which ipv4 port to listen on.
                    			(eg. 1969, default is 4242)
-    --host <ip>    			Set which ipv4 host to listen on.
+      --host <ip>    			Set which ipv4 host to listen on.
                    			(eg. 0.0.0.0 or 127.0.0.1)
 
 Examples:
