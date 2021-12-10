@@ -1,5 +1,5 @@
 .tarignore
-src/gpumgr.log
+src/*.log
 node_modules
 docs/README.md
 release

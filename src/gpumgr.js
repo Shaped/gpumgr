@@ -23,7 +23,6 @@ global.fs = require('fs');
 
 const websocketHandler = require("./websocketHandler.js");
 
-//const $me = (path.basename(process.argv[1]) == "gpumgr.js") ? 'gpumgr' : path.basename(process.argv[1]);
 const $me = path.basename(process.argv[1]);
 const $version = `0.0.6-alpha`;
 const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
@@ -61,10 +60,10 @@ class gpuManager {
 	}
 
 	async handleArguments() {
-		if (typeof process.argv[2] === 'undefined') process.argv[2] = 'help';
+		process.argv[2] = (typeof process.argv[2] === 'undefined') ? 'help' : process.argv[2];
 
-		if (process.argv[2] != 'start'
-		&&  process.argv[2] != 'stop') logger.log(`${$me} ${$version} starting..`);
+		(process.argv[2] != 'start' && process.argv[2] != 'stop')
+		? logger.log(`${$me} ${$version} starting..`):null;
 
 		switch (process.argv[2]) {
 			case 'show':
@@ -133,13 +132,13 @@ class gpuManager {
 				}
 			  break;
 			case '__child':
-				process.on('beforeExit', this.beforeChildExit.bind(this));
+				process.on('beforeExit', this.nothingLeftToDo.bind(this));
 				process.on('exit', this.handleChildExit.bind(this));
 				await this.enumerateGPUs();
 			  break;
 			default:
 				console.log(`Command line argument not understood: '${process.argv[2]}'`);
-				this.showUsage()
+				this.showUsage();
 		}
 	}
 
@@ -154,11 +153,11 @@ class gpuManager {
 				var intv = setInterval(()=> {
 					count++;
 					try {
-						if (process.kill(pid, 0) == true)
-							if (signal == "SIGINT" && count > (timeout/2))
-								process.kill(pid, 'SIGTERM');
-							else
-								process.kill(pid, signal);
+						(process.kill(pid, 0) == true)
+						? (signal == "SIGINT" && count > (timeout/2))
+							? process.kill(pid, 'SIGTERM')
+							: process.kill(pid, signal)
+						:null;
 					} catch (e) {
 						clearInterval(intv);
 						resolve();
@@ -190,7 +189,6 @@ class gpuManager {
 				logger.log("Caught SIGUSR2 - soft-restarting..");
 				await this.stopDaemon();
 				logger.log("Stopped..");
-				//await asleep(2500);
 				await this.startDaemon(true);
 				logger.log("Done soft-restarting..");
 			  break;
@@ -216,13 +214,13 @@ class gpuManager {
 		}
 	}
 
-
-	// no async code here! not even with await!
-	beforeChildExit(code) {
+	// no async code here! not even with await, it can loop-back!
+	nothingLeftToDo(code) {
 		logger.log(`${$me} daemon shutting down..`);
 	}
 
 	handleChildExit(code) {
+		fs.unlinkSync(`/tmp/gpumgr.pid`);
 		logger.log(`${$me} daemon exiting.`);
 		process.exit();
 	}
@@ -504,14 +502,12 @@ class gpuManager {
 				for (let clock of clocks) {
 					let [id,mhz] = clock.split(`: `);
 					let active = (mhz.substr(-1,1) == `*`)?true:false;
-					mhz = (mhz.substr(-1,1) == `*`)?
-					mhz.substring(0,mhz.length-2):
-					mhz.substring(0,mhz.length-1);
-					clocksArray.push({
-						id:id,
-						mhz:mhz,
-						active:active
-					});
+
+					mhz = (mhz.substr(-1,1) == `*`)
+						? mhz.substring(0,mhz.length-2)
+						: mhz.substring(0,mhz.length-1);
+
+					clocksArray.push({ id:id, mhz:mhz,active:active });
 					mhz = mhz.substring(0,mhz.length-2);
 				}
 			  break;
@@ -531,14 +527,12 @@ class gpuManager {
 				for (let clock of clocks) {
 					let [id,mhz] = clock.split(`: `);
 					let active = (mhz.substr(-1,1) == `*`)?true:false;
-					mhz = (mhz.substr(-1,1) == `*`)?
-					mhz.substring(0,mhz.length-2):
-					mhz.substring(0,mhz.length-1);
-					clocksArray.push({
-						id:id,
-						mhz:mhz,
-						active:active
-					});
+
+					mhz = (mhz.substr(-1,1) == `*`)
+						? mhz.substring(0,mhz.length-2)
+						: mhz.substring(0,mhz.length-1);
+
+					clocksArray.push({ id:id, mhz:mhz, active:active });
 					mhz = mhz.substring(0,mhz.length-2);
 				}
 			  break;
@@ -556,9 +550,7 @@ class gpuManager {
 
 				for (let clock of clocks) {
 					let [id,mhz] = clock.split(`: `);
-					if (mhz.substr(-1,1) == `*`) {
-						current_mhz = mhz.substring(0,mhz.length-2);
-					}
+					if (mhz.substr(-1,1) == `*`) current_mhz = mhz.substring(0,mhz.length-2);
 				}
 			  break;
 		}
