@@ -12,6 +12,10 @@
 		],
 		"outputPath": "bin"
 	},
+	"scripts": {
+		"build": "./build.sh",
+		"build-release": "./build.sh release"
+	},
 	"dependencies": {
 		"xml2json": "^0.12.0"
 	}
