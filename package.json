@@ -1,0 +1,13 @@
+{
+  "bin": {
+	"gpumgr":"src/app.js"
+  },
+  "version" : "0.02a",
+  "name" : "gpumgr",
+  "license" : "GPL-3.0-or-later",
+  "pkg" : {
+	"assets": "src/**/*",
+	"targets": ["node10-linux-x64"],
+	"outputPath": "bin"
+  }
+}

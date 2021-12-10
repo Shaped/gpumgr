@@ -1,6 +1,6 @@
 #!/usr/bin/node
 /* 
-	gpumgr v0.01a
+	gpumgr v0.03a
 	(C) 2022 Shaped Technologies
 
 	gpumgr is based on amdpwrman which was originally only for amdgpus
@@ -10,13 +10,11 @@
 
 "use strict";
 
-
 const util = require('util');
 const child = require('child_process');
 
 const exec = util.promisify(require('child_process').exec);
 
-//const xmlconvert = require('xml-js');
 const xmlParser = require('xml2json');
 
 global.fsp = require('fs').promises;
@@ -25,7 +23,7 @@ global.fs = require('fs');
 const websocketHandler = require("./websocketHandler.js");
 
 const $me = `gpumgr`;
-const $version = `0.02a`;
+const $version = `0.03a`;
 const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 const $license = `GPLv3 License`;
 
@@ -48,24 +46,30 @@ class gpuManager {
 	handleArgumentsEarly() {
 		switch (process.argv[2]) {
 			case 'start':
-			case 'stop':
-			case '__child':
 				logger.divertToFile();
 			  break;
-			default:
+		};
+
+		switch (process.argv[2]) {
+			case '__child':
+				logger.divertToFile();
+				this.childProcess = process;
+				this.startDaemonChild();
 		};
 	}
 
 	async handleArguments() {
-		if (process.argv[2] != 'start') {
-			logger.log(`gpumgr ${$version} starting..`)
-		}
+		if (typeof process.argv[2] === 'undefined') process.argv[2] = 'help';
 
-		if (process.argv[2] != 'help'
-		&& process.argv[2] != '-h'
-		&& process.argv[2] != '--help') {
-			await this.enumerateGPUs();
-		} 
+		if (process.argv[2] != 'start'
+		&&  process.argv[2] != 'stop') logger.log(`gpumgr ${$version} starting..`);
+
+		switch (process.argv[2]) {
+			case 'show':
+			case 'fan':
+			case 'power':
+				await this.enumerateGPUs();
+		}
 
 		switch (process.argv[2]) {
 			case '-h':
@@ -73,16 +77,25 @@ class gpuManager {
 			case 'help':
 			case 'usage':
 			case 'wtf':
-				this.showUsage()
+				this.showUsage();
 			  break;
 			case 'show':
 				this.handleShowStatus();
 			  break;
 			case 'start':
-				this.startDaemon();
+				await this.startDaemon();
 				logger.divertToFile();
 				await logger.log(`gpumgr ${$version} daemon started`)
 				process.exit();
+			  break;
+			case 'stop':
+				try {
+					let pid = await this.getChildPID();
+					await logger.log(`gpumgr attempting to stop daemon with pid: ${pid}`);
+					process.kill(pid, "SIGINT");
+				} catch (e) {
+					await logger.log(`gpumgr unable to find child daemon`);
+				}
 			  break;
 			case '__child':
 				process.on('beforeExit', this.beforeChildExit.bind(this));
@@ -95,6 +108,47 @@ class gpuManager {
 		}
 	}
 
+	async getChildPID() { return (await fsp.readFile(`/tmp/gpumgr.pid`, `utf8`)); }
+
+	async handleSignal(signal) {
+		switch (signal) {
+			case 'SIGINT':
+				logger.log("Caught SIGINT - cleaning up and exiting..");
+				await this.stopDaemon();
+				process.exit();
+			  break;
+			case 'SIGTERM':
+				logger.log("Caught SIGTERM - cleaning up and exiting..");
+				await this.stopDaemon();
+				process.exit();
+			case 'SIGUSR2':
+				logger.log("Caught SIGUSR2 - soft-restarting..");
+				await this.stopDaemon();
+				logger.log("Stopped..");
+				await asleep(2500);
+				await this.startDaemon();
+				logger.log("Done soft-restarting..");
+			  break;
+		}
+	}
+
+	startDaemonChild() {
+		setInterval(()=>{
+			logger.log("Daemon Child Reporting");
+		},5000);
+	}
+
+	async startDaemon() {
+		if (typeof this.childProcess === 'undefined')
+			this.childProcess = child.fork(__filename, ['__child'], {detached:true});
+
+		fs.writeFileSync(`/tmp/gpumgr.pid`, this.childProcess.pid);
+	}
+
+	async stopDaemon() {
+		logger.log(`gpumgr ${$version} daemon shutting down.`);
+	}
+
 	// no async code here! not even with await!
 	beforeChildExit(code) {
 		logger.log(`gpumgr daemon shutting down..`);
@@ -103,81 +157,6 @@ class gpuManager {
 	handleChildExit(code) {
 		logger.log(`gpumgr daemon exiting.`);
 		process.exit();
-	}
-
-	showUsage() {
-		const usageTemplate = 
-//////////////////////////////////////////////////////////////////////////
-`
-${$me} ${$version}	${$copyright}		${$license}
-
-${$me} shows statistics and manipulates power limit settings for GPUs on Linux
-through various interfaces provided by manufacturer's drivers, for example,
-using the sysfs interface to interact with the amdgpu driver.
-
-The original script (amdpwrman) was designed to be simple, easy to use and have
-no dependencies, however, BASH scripting is kind of a pain so I decided to
-rewrite this as a NodeJS app with an included (optional to use) web interface.
-
-There will be an easy to use binary distribution of this, or you can just clone
-the repo and run or build the script yourself.
-
-Most commands will execute the command and exit. For example, using
-'./gpumgr fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply set
-it once and exit.
-
-If you want fan speed monitoring or curve control or to use the web interface,
-you must start the daemon. Once the daemon is running, you can manage settings
-for your GPUs at http://127.0.0.1:1969 - or on whatever port you specified.
-
-Usage:
-
-  ${$me} [command] <gpu> <options>
-
-  If <gpu> is omitted from any command, GPU0 is assumed.
-
-  <gpu> can be a comma separated list of GPU numbers.
-  <gpu> can be set to 'all' to affect ALL GPUs
-  <gpu> can be set to 'amd' to affect all AMD GPUs
-  <gpu> can be set to 'nvidia' to affect all Nvidia GPUs
-  <gpu> can be set to 'intel' to affect all Intel GPUs
-
-  Commands with no options or only GPU specified:
-
-  ${$me} help | --help | -h 		Display this help message.
-  ${$me} list <gpu>			List available GPUs and their GPU#
-  ${$me} show <gpu> 			Show detailed statistics for <gpu>
-  ${$me} status <gpu> 			Same as above
-  ${$me} power <percent> <gpu>		Set <gpu>'s power target to <percent>
-  ${$me} power reset <gpu>		Reset default power limit for <gpu>
-  ${$me} recover <gpu>			Attempt driver recovery mechanism for <gpu>
-  ${$me} fan enable <gpu>		Enable manual fan control for <gpu>
-  ${$me} fan disable <gpu>		Disable manual fan control for <gpu>
-  ${$me} fan [percent] <gpu>		Set <gpu>'s fan speed to <percent>
-  ${$me} start <options>		Starts the gpumgr background service
-  ${$me} stop 				Stops the gpumgr background service
-
-Options for Commands with Options:
-
-  ${$me} start 				Starts the gpumgr background service
-
-  Options for 'start':
-    --port <number>			Set which ipv4 port to listen on (eg. 1969)
-    --host <ip>				Set which ipv4 host to listen on (eg. 0.0.0.0
-					or 127.0.0.1)
-
-Examples:
-
-  ${$me} show nvidia 			Show status of all Nvidia GPUs
-  ${$me} list intel 			List all Intel GPU#s
-  ${$me} fan enable 0 			Enable manual fan control for GPU0
-  ${$me} fan disable all 		Enable auto fan control for all GPUs
-  ${$me} fan 100% 0 			Set GPU0 fan speed to 100%
-  ${$me} start --port 4200		Start the background service on port 4200
-`;
-//////////////////////////////////////////////////////////////////////////
-
-		console.log(usageTemplate);
 	}
 
 	async enumerateGPUs() {
@@ -216,7 +195,9 @@ Examples:
 					//let result = xmlconvert.xml2json(nvidiaQuery.stdout);
 					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
 				  break;
-				case `8086`: vendorName = 'intel'; break;
+				case `8086`:
+					vendorName = 'intel';
+				  break;
 			}
 
 			logger.log(`Found GPU${gpu} from ${vendorName} (${vendorid}:${deviceid})`);
@@ -720,6 +701,81 @@ Examples:
 		}
 	}
 
+	showUsage() {
+		const usageTemplate = 
+//////////////////////////////////////////////////////////////////////////
+`
+${$me} ${$version}	${$copyright}		${$license}
+
+${$me} shows statistics and manipulates power limit settings for GPUs on Linux
+through various interfaces provided by manufacturer's drivers, for example,
+using the sysfs interface to interact with the amdgpu driver.
+
+The original script (amdpwrman) was designed to be simple, easy to use and have
+no dependencies, however, BASH scripting is kind of a pain so I decided to
+rewrite this as a NodeJS app with an included (optional to use) web interface.
+
+There will be an easy to use binary distribution of this, or you can just clone
+the repo and run or build the script yourself.
+
+Most commands will execute the command and exit. For example, using
+'./gpumgr fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply set
+it once and exit.
+
+If you want fan speed monitoring or curve control or to use the web interface,
+you must start the daemon. Once the daemon is running, you can manage settings
+for your GPUs at http://127.0.0.1:1969 - or on whatever port you specified.
+
+Usage:
+
+  ${$me} [command] <gpu> <options>
+
+  If <gpu> is omitted from any command, GPU0 is assumed.
+
+  <gpu> can be a comma separated list of GPU numbers.
+  <gpu> can be set to 'all' to affect ALL GPUs
+  <gpu> can be set to 'amd' to affect all AMD GPUs
+  <gpu> can be set to 'nvidia' to affect all Nvidia GPUs
+  <gpu> can be set to 'intel' to affect all Intel GPUs
+
+  Commands with no options or only GPU specified:
+
+  ${$me} help | --help | -h 		Display this help message.
+  ${$me} list <gpu>			List available GPUs and their GPU#
+  ${$me} show <gpu> 			Show detailed statistics for <gpu>
+  ${$me} status <gpu> 			Same as above
+  ${$me} power <percent> <gpu>		Set <gpu>'s power target to <percent>
+  ${$me} power reset <gpu>		Reset default power limit for <gpu>
+  ${$me} recover <gpu>			Attempt driver recovery mechanism for <gpu>
+  ${$me} fan enable <gpu>		Enable manual fan control for <gpu>
+  ${$me} fan disable <gpu>		Disable manual fan control for <gpu>
+  ${$me} fan [percent] <gpu>		Set <gpu>'s fan speed to <percent>
+  ${$me} start <options>		Starts the gpumgr background service
+  ${$me} stop 				Stops the gpumgr background service
+
+Options for Commands with Options:
+
+  ${$me} start 				Starts the gpumgr background service
+
+  Options for 'start':
+    --port <number>			Set which ipv4 port to listen on (eg. 1969)
+    --host <ip>				Set which ipv4 host to listen on (eg. 0.0.0.0
+					or 127.0.0.1)
+
+Examples:
+
+  ${$me} show nvidia 			Show status of all Nvidia GPUs
+  ${$me} list intel 			List all Intel GPU#s
+  ${$me} fan enable 0 			Enable manual fan control for GPU0
+  ${$me} fan disable all 		Enable auto fan control for all GPUs
+  ${$me} fan 100% 0 			Set GPU0 fan speed to 100%
+  ${$me} start --port 4200		Start the background service on port 4200
+`;
+//////////////////////////////////////////////////////////////////////////
+
+		console.log(usageTemplate);
+	}
+
 	async showStatus(gpu) {
 		logger.log(`Showing status for GPU${gpu}`)
 
@@ -752,35 +808,6 @@ GPU${gpu}: Fan speed for is ${this.GPUs[gpu].fan.percent}% (${this.GPUs[gpu].fan
 GPU${gpu}: Fan control is set to ${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fan.mode == 'automatic')?"(target: "+this.GPUs[gpu].fan.target+" RPM)":''}`;
 
 		console.log(statusTemplate);
-	}
-
-	async handleSignal(signal) {
-		switch (signal) {
-			case 'SIGINT':
-				logger.log("Caught SIGINT - cleaning up and exiting..");
-				await this.stopDaemon();
-				process.exit();
-			  break;
-			case 'SIGTERM':
-				logger.log("Caught SIGTERM - cleaning up and exiting..");
-				await this.stopDaemon();
-				process.exit();
-			case 'SIGUSR2':
-				logger.log("Caught SIGUSR2 - soft-restarting..");
-				await this.stopDaemon();
-				logger.log("Stopped..");
-				await asleep(2500);
-				await this.startDaemon();
-				logger.log("Done soft-restarting..");
-			  break;
-		}
-	}
-
-	async startDaemon() {
-		this.childProcess = child.fork(__filename, ['__child'], {detached:true});
-	}
-
-	async stopDaemon() {
 	}	
 }
 

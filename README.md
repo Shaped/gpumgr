@@ -6,14 +6,14 @@ Since it's no longer just a shell script, obviously there are more dependencies:
 
 There's also a binary compiled verison for Linux in /bin/, this has been compiled with pkg and is simply there so you have a quick option to get up and running.
 
-Don't trust the binary? Build it yourself; run build.sh in the ./src/ directory with pkg installed and your binary will pop out in ../bin/
+Don't trust the binary? Build it yourself; run build.sh with pkg installed and your binary will pop out in ../bin/
 
 Usage is quite similar to that of amdpwrman.
 
 Usage:
 
 ```
-gpumgr 0.02a    (C) 2022 Jai B. (Shaped Technologies)           GPLv3 License
+gpumgr 0.03a    (C) 2022 Jai B. (Shaped Technologies)           GPLv3 License
 
 gpumgr shows statistics and manipulates power limit settings for GPUs on Linux
 through various interfaces provided by manufacturer's drivers, for example,
