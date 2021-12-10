@@ -90,7 +90,7 @@ else
 					case "$response" in
 						[yY][eE][sS]|[yY])
 							echo "Updating local repo!"
-							git update -u
+							git add -u
 						;;
 						*)
 							echo "Not updating local repo!"
@@ -101,7 +101,7 @@ else
 					echo
 					echo "Would you like to commit the shown local staged changes?"
 					echo
-					read -r -p "Are you sure you want to push to GitHub.IO? [y/N] " response
+					read -r -p "Are you sure you commit changes to local repo? [y/N] " response
 					case "$response" in
 						[yY][eE][sS]|[yY])
 							git commit

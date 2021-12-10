@@ -96,8 +96,7 @@ Examples:
 0.02a - 12/8/21 - able to show some stats for nvidia GPUs as well
 0.03a - 12/8/21 - service structure started
 0.04a - 12/9/21 - fan control for amdgpu enabled
-
-### TODO.md
+0.05a - 12/9/21 - some tidying up, build.sh updated for making release easier for me### TODO.md
 
 - finish implementing all amdgpu features from amdpwrman
 - implement as much original^ functionality as possible for nvidia
