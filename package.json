@@ -1,11 +1,29 @@
 {
+	"name": "gpumgr",
+	"version": "0.0.6-alpha",
+	"description":"gpumgr is a Linux tool for viewing and managing GPUs (power, fan, clocks) both from the shell and from a web interface.",
+	"author": {
+		"name": "Forbidden Era (Jai B.)",
+		"email": "jai@shaped.ca",
+		"url": "https://github.com/Shaped/"
+	},
+	"private":"true",
+	"repository":"github:Shaped/gpumgr",
+	"license": "GPL-3.0-or-later",
+	"readme": "README.md",
+	"homepage":"https://github.com/Shaped/gpumgr",
+	"bugs":"https://github.com/Shaped/gpumgr/issues",
+	"keywords": [
+		"amd", "amdgpu", "radeon",
+		"nvidia", "geforce", "rtx", "gtx",
+		"intel", "xe",
+		"gpu", "gpu management",
+		"linux", "fan", "fan control"
+	],
+	"main":"src/gpumgr.js",
 	"bin": {
 		"gpumgr": "src/gpumgr.js"
 	},
-	"version": "0.0.6-alpha",
-	"name": "gpumgr",
-	"license": "GPL-3.0-or-later",
-	"readme": "README.md",
 	"pkg": {
 		"targets": [
 			"node10-linux-x64"
@@ -18,5 +36,14 @@
 	},
 	"dependencies": {
 		"xml2json": "^0.12.0"
-	}
+	},
+	"engines": {
+		"node": ">= 10.7.0",
+		"npm": ">= 6.0.0"
+	},
+	"browserslist": [
+		"defaults",
+		"not IE 11",
+		"maintained node versions"
+	]
 }
