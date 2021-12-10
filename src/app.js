@@ -54,8 +54,40 @@ class gpuManager {
 			case '__child':
 				logger.divertToFile();
 				this.childProcess = process;
-				this.startDaemonChild();
+				this.startDaemon();
 		};
+	}
+
+	killPID(pid, signal = 'SIGINT', timeout = 5) {
+		return new Promise((resolve, reject) => {
+			let count = 0;
+
+			try {
+				process.kill(pid, 0);
+				var intv = setInterval(()=> {
+					count++;
+					try {
+						if (process.kill(pid, 0) == true) {
+							if (signal == "SIGINT" && count > (timeout/2)) {
+								process.kill(pid, 'SIGTERM');
+							} else {
+								process.kill(pid, signal);
+							}
+						}
+					} catch (e) {
+						clearInterval(intv);
+						resolve();
+					}
+
+					logger.log(`Waiting .. ${count} [${pid}]`);
+					if (count > timeout) reject(new Error(`timed out killing ${pid}`));
+				},1000);
+			} catch (e) {
+				clearInterval(intv);
+				resolve();
+			}
+
+		});
 	}
 
 	async handleArguments() {
@@ -83,18 +115,49 @@ class gpuManager {
 				this.handleShowStatus();
 			  break;
 			case 'start':
-				await this.startDaemon();
+				await this.forkDaemon();
 				logger.divertToFile();
-				await logger.log(`gpumgr ${$version} daemon started`)
+				await logger.log(`gpumgr ${$version} daemon started [${this.childProcess.pid}]`)
 				process.exit();
+			  break;
+			case 'force':
+				switch (process.argv[3]) {
+					case 'restart':
+						let pid = await this.getChildPID();
+						await logger.log(`gpumgr attempting to stop daemon [${pid}]`);
+						await this.killPID(pid);
+						await logger.log(`gpumgr attempting to start new daemon...`);
+						await this.forkDaemon();
+						await logger.log(`gpumgr ${$version} daemon started [${this.childProcess.pid}]`)
+						process.exit();
+					  break;
+					case 'stop':
+						try {
+							let pid = await this.getChildPID();
+							await logger.log(`gpumgr attempting to kill daemon [${pid}]`);
+							process.kill(pid, "SIGTERM");
+						} catch (e) {
+							await logger.log(`gpumgr unable to find daemon`);
+						}
+					  break;
+				}
+			  break;
+			case 'restart':
+				try {
+					let pid = await this.getChildPID();
+					await logger.log(`gpumgr attempting to restart daemon [${pid}]`);
+					process.kill(pid, "SIGUSR2");
+				} catch (e) {
+					await logger.log(`gpumgr unable to find daemon`);
+				}
 			  break;
 			case 'stop':
 				try {
 					let pid = await this.getChildPID();
-					await logger.log(`gpumgr attempting to stop daemon with pid: ${pid}`);
+					await logger.log(`gpumgr attempting to stop daemon [${pid}]`);
 					process.kill(pid, "SIGINT");
 				} catch (e) {
-					await logger.log(`gpumgr unable to find child daemon`);
+					await logger.log(`gpumgr unable to find daemon`);
 				}
 			  break;
 			case '__child':
@@ -125,29 +188,32 @@ class gpuManager {
 				logger.log("Caught SIGUSR2 - soft-restarting..");
 				await this.stopDaemon();
 				logger.log("Stopped..");
-				await asleep(2500);
-				await this.startDaemon();
+				//await asleep(2500);
+				await this.startDaemon(true);
 				logger.log("Done soft-restarting..");
 			  break;
 		}
 	}
 
-	startDaemonChild() {
-		setInterval(()=>{
-			logger.log("Daemon Child Reporting");
-		},5000);
-	}
-
-	async startDaemon() {
-		if (typeof this.childProcess === 'undefined')
-			this.childProcess = child.fork(__filename, ['__child'], {detached:true});
-
-		fs.writeFileSync(`/tmp/gpumgr.pid`, this.childProcess.pid);
+	async startDaemon(restart = false) {
+		this.daemonInterval = setInterval(async()=>{
+			await logger.log(`Daemon Child Reporting`);
+		},5000);		
 	}
 
 	async stopDaemon() {
-		logger.log(`gpumgr ${$version} daemon shutting down.`);
+		clearInterval(this.daemonInterval);
+
+		await logger.log(`gpumgr ${$version} daemon shutting down.`);
 	}
+
+	async forkDaemon(restart = false) {
+		if (typeof this.childProcess === 'undefined') {
+			this.childProcess = child.fork(__filename, ['__child'], {detached:true});
+			fs.writeFileSync(`/tmp/gpumgr.pid`, this.childProcess.pid);
+		}
+	}
+
 
 	// no async code here! not even with await!
 	beforeChildExit(code) {
@@ -751,6 +817,7 @@ Usage:
   ${$me} fan disable <gpu>		Disable manual fan control for <gpu>
   ${$me} fan [percent] <gpu>		Set <gpu>'s fan speed to <percent>
   ${$me} start <options>		Starts the gpumgr background service
+  ${$me} restart			Restarts the gpumgr background service
   ${$me} stop 				Stops the gpumgr background service
 
 Options for Commands with Options:
