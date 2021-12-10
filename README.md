@@ -1,16 +1,30 @@
-## gpumgr v0.0.6-alpha
+## gpumgr v0.0.7-alpha
 
-gpumgr is the spiritual successor to amdpwrman
+gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman. 
+
+gpumgr is a Linux tool for viewing and managing GPUs (power, fan, clocks) both from the shell and from a web interface (wip).
 
 Re-written in JS (NodeJS) to make things easier to code and maintain, especially around adding other GPU vendors. Also allows us to have a better daemon solution (than a shell script) and a web interface.
 
-Since it's no longer just a shell script, obviously there are more dependencies: currently, just a recent-ish version of NodeJS (\~10.20+).
+Since it's no longer just a shell script, obviously there are more dependencies: currently, pretty much just a recent-ish version of NodeJS (10.7.0+). Performance is also now better!  `amdpwrman show 0` on my system takes `0m0.548s` - running gpumgr from the packed binary is \~25% faster than amdpwrman at `0m0.0398s`.
+
+### Requirements
+
+If you're using the binary version, you should only need your GPU drivers and what comes with them.
+
+Source version requires NodeJS 10.7.0+, npm 6.0.0+. Building requires *[pkg](https://github.com/vercel/pkg)*.
+
+AMD GPUs need the amdgpu or amdgpu-pro drivers, mostly interfaces with *sysfs*.
+
+Nvidia GPUs need the official Nvidia drivers, mostly interfaces with *nvidia-smi* and *nvidia-settings*. Changing clocks will most likely require X as I'm not aware of a way to do it aside from *nvidia-settings* and that requires X.
 
 ### Building & Binary
 
 There's also a binary compiled/packaged verison for Linux in *bin/*, this has been compiled/"packaged" with *[pkg](https://github.com/vercel/pkg)* and is simply there so you have a quick option to get up and running without having to install NodeJS or any dependencies.
 
-Don't trust the binary? No problem! You can easily just run the script directly or build it yourself; run build.sh with *[pkg](https://github.com/vercel/pkg)* installed and your binary will pop out in *bin/* - technically, you don't need NodeJS installed to do the build even as *[pkg](https://github.com/vercel/pkg)* will download the appropriate binaries; however, installing *[pkg](https://github.com/vercel/pkg)* requires npm which requires NodeJS..? You can easily build for other versions of NodeJS than what you have installed though.
+Don't trust the binary? No problem! You can easily just run the script directly or build it yourself; run `build.sh` or `npm run build` with *[pkg](https://github.com/vercel/pkg)* installed and your binary will pop out in *bin/* - technically, you don't need NodeJS installed to do the build even as *[pkg](https://github.com/vercel/pkg)* will download the appropriate binaries; however, installing *[pkg](https://github.com/vercel/pkg)* requires npm which requires NodeJS..? You can easily build for other versions of NodeJS than what you have installed though.
+
+You'll want to run `npm ci` to download the appropriate npm packages if you want to run from source or build. `npm run build` will also build a binary for you.
 
 ### Usage:
 
@@ -21,7 +35,7 @@ You can call the script directly and the shebang will call NodeJS.
 If you don't have NodeJS, you can download the binary version which is simply this script pre-packed with *[pkg](https://github.com/vercel/pkg)* with the required NodeJS and dependencies to run.
 
 ```
-gpumgr v0.0.6-alpha
+gpumgr v0.0.7-alpha
 
 gpumgr shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
@@ -94,12 +108,13 @@ Examples:
 ### CHANGELOG.md
 
 ```
-0.01a - 12/7/21 - the beginning, able to show stats for AMD GPUs
-0.02a - 12/8/21 - able to show some stats for nvidia GPUs as well
-0.03a - 12/8/21 - service structure started
-0.04a - 12/9/21 - fan control for amdgpu enabled
-0.05a - 12/9/21 - some tidying up, build.sh updated for making release easier for me
-0.0.6-alpha - 12/9/21 - more tidying up for build stuff, version numbering now npm friendly
+0.01a - 12/07/21 - the beginning, able to show stats for AMD GPUs
+0.02a - 12/08/21 - able to show some stats for nvidia GPUs as well
+0.03a - 12/08/21 - service structure started
+0.04a - 12/09/21 - fan control for amdgpu enabled
+0.05a - 12/09/21 - some tidying up, build.sh updated for making release easier for me
+0.0.6-alpha - 12/10/21 - more tidying up for build stuff, version numbering now npm friendly
+0.0.7-alpha - 12/10/21 - basic power and fan management for both AMD and NVIDIA now working
 ```
 ### TODO.md
 

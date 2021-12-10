@@ -1,7 +1,7 @@
 {
 	"name": "gpumgr",
-	"version": "0.0.6-alpha",
-	"description":"gpumgr is a Linux tool for viewing and managing GPUs (power, fan, clocks) both from the shell and from a web interface.",
+	"version": "0.0.7-alpha",
+	"description":"gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman.",
 	"author": {
 		"name": "Forbidden Era (Jai B.)",
 		"email": "jai@shaped.ca",
