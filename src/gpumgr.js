@@ -1,6 +1,6 @@
 #!/usr/bin/node
 /* 
-	gpumgr v0.0.7-alpha
+	gpumgr v0.0.8-alpha
 	(C) 2022 Shaped Technologies
 
 	gpumgr is based on amdpwrman which was originally only for amdgpus
@@ -27,7 +27,7 @@ const asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 
 const $me = path.basename(process.argv[1]);
 
-const $version = `0.0.7-alpha`;
+const $version = `0.0.8-alpha`;
 const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 const $license = `GPLv3 License`;
 
@@ -35,6 +35,7 @@ class gpuManager {
 	constructor() {
 		this.GPUs = [];
 		this.logFile = `${$me}.log`;
+		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
@@ -68,10 +69,14 @@ class gpuManager {
 		(process.argv[2] != 'start' && process.argv[2] != 'stop')
 		? logger.log(`${$me} ${$version} starting..`):null;
 
+		if (process.argv[process.argv.length-1] == '-g'
+		||  process.argv[process.argv.length-1] == '--no-colors') ansi.disableColor();
+
 		switch (process.argv[2]) {
 			case 'show':
 			case 'fan':
 			case 'power':
+			case 'list':
 				await this.enumerateGPUs();
 		}
 
@@ -84,6 +89,7 @@ class gpuManager {
 			case 'fan'   : this.handleFans(); break;
 			case 'power' : this.handlePower(); break;
 			case 'show'  : this.handleShowStatus(); break;
+			case 'list'  : this.handleListGPUs(); break;
 			case 'start':
 				await this.forkDaemon();
 				logger.divertToFile();
@@ -375,6 +381,34 @@ class gpuManager {
 					await this.setGPUPower(gpu, power);
 			}
 		}
+	}
+
+	async handleListGPUs() {
+		let gpu = process.argv[3];
+		switch (gpu) {
+			case 'all':
+				for (gpu of this.GPUs) await this.listGPU(gpu.gpu);
+			  break;
+			case 'nvidia':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'nvidia') await this.listGPU(gpu.gpu);
+			  break;
+			case 'amd':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'amd') await this.listGPU(gpu.gpu);
+			  break;
+			case 'intel':
+				for (gpu of this.GPUs)
+					if (gpu.vendorName == 'intel') await this.listGPU(gpu.gpu);
+			  break;
+			default:
+				if (Number.isInteger(parseInt(process.argv[3]))) {
+					gpu = process.argv[3];
+					await this.listGPU(gpu);
+				} else {
+					for (gpu of this.GPUs) await this.listGPU(gpu.gpu);
+				}
+		}		
 	}
 
 	async handleShowStatus() {
@@ -1155,10 +1189,10 @@ class gpuManager {
 				this.GPUs[gpu].gpuClocksPrintable = '';
 				for (let [id,clk] of this.GPUs[gpu].gpuClocks.entries()) {
 					let mhz = clk.mhz;
-					if (clk.active) this.GPUs[gpu].gpuClocksPrintable +='[';
+					if (clk.active) this.GPUs[gpu].gpuClocksPrintable +=`${ansi.FgBrMagenta}[`;
 					this.GPUs[gpu].gpuClocksPrintable += mhz;
 					if (clk.active) {
-						this.GPUs[gpu].gpuClocksPrintable +=']';
+						this.GPUs[gpu].gpuClocksPrintable +=`]${ansi.FgBrCyan}`;
 						this.GPUs[gpu].gpuClockProfile = clk.id;
 					}
 					if (id < this.GPUs[gpu].gpuClocks.length-1) this.GPUs[gpu].gpuClocksPrintable += ", ";
@@ -1167,10 +1201,10 @@ class gpuManager {
 				this.GPUs[gpu].memoryClocksPrintable = '';
 				for (let [id,clk] of this.GPUs[gpu].memoryClocks.entries()) {
 					let mhz = clk.mhz;
-					if (clk.active) this.GPUs[gpu].memoryClocksPrintable +='[';
+					if (clk.active) this.GPUs[gpu].memoryClocksPrintable +=`${ansi.FgBrMagenta}[`;
 					this.GPUs[gpu].memoryClocksPrintable += mhz;
 					if (clk.active) {
-						this.GPUs[gpu].memoryClocksPrintable +=']';
+						this.GPUs[gpu].memoryClocksPrintable +=`]${ansi.FgBrCyan}`;
 						this.GPUs[gpu].memoryClockProfile = clk.id;
 					}
 					if (id < this.GPUs[gpu].memoryClocks.length-1) this.GPUs[gpu].memoryClocksPrintable += ", ";
@@ -1241,6 +1275,10 @@ Usage:
 
 Options for Commands with Options:
 
+	[any]
+
+	-g | --no-colors        Disable ANSI Color formatting
+
 	start 				Starts the ${$me} background service.
 
   Options for 'start':
@@ -1263,27 +1301,69 @@ Examples:
 		console.log(usageTemplate);
 	}
 
+	async listGPU(gpu) {
+		let productName = 'Unknown', post = `${ansi.Reset}`, vendorColored = '', teamColor = '', teamColorName = '', tempColor = '';
+		await this.getGPUStatus(gpu);
+
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				vendorColored = `${ansi.FgRed}AMD${ansi.Reset}`;
+				teamColor = `${ansi.FgRed}`; teamColorName='Red';
+			  break;
+			case 'nvidia':
+				vendorColored = `${ansi.FgGreen}NVIDIA${ansi.Reset}`;
+				teamColor = `${ansi.FgGreen}`; teamColorName='Green';
+				productName = `${this.GPUs[gpu].nv.nvidia_smi_log.gpu.product_name}${ansi.Reset}`;
+			  break;
+			case 'intel':
+				vendorColored = `${ansi.FgBrBlue}Intel${ansi.reset}`;
+				teamColor = `${ansi.FgBrBlue}`; teamColorName='Blue?';
+			  break;
+			default:
+		}
+
+		const listTemplate =
+///////////////////////////////////////////////////////////////////////////////
+// List GPUs CLI Template                                                    //
+///////////////////////////////////////////////////////////////////////////////		 
+`${ansi.FgCyan}GPU${gpu}: Vendor: ${vendorColored} ${teamColor}${productName} ${ansi.FgBrMagenta}(${this.GPUs[gpu].vendorid}:${this.GPUs[gpu].deviceid} @ ${this.GPUs[gpu].pcidevice})${ansi.Reset}`;
+///////////////////////////////////////////////////////////////////////////////	
+		console.log(listTemplate);
+	}
+
 	async showStatus(gpu) {
+		let pre = '', post = `${ansi.Reset}`, vendorColored = '', teamColor = '', teamColorName = '', tempColor = '';
 		logger.log(`Showing status for GPU${gpu}`)
 
 		await this.getGPUStatus(gpu);
 
-		let pre = '', post = '';
-
 		switch (this.GPUs[gpu].vendorName) {
 			case 'amd':
-				pre = `GPU${gpu}: amdgpu ${this.GPUs[gpu].driver_version}`;
+				vendorColored = `${ansi.FgRed}AMD${ansi.Reset}`;
+				teamColor = `${ansi.FgRed}`; teamColorName='Red';
+				pre = `${ansi.FgCyan}GPU${gpu}:${ansi.Reset} ${ansi.FgRed}amdgpu-${this.GPUs[gpu].driver_version}${ansi.Reset}`;
 			  break;
 			case 'nvidia':
-				pre = `GPU${gpu}: ${this.GPUs[gpu].nv.nvidia_smi_log.gpu.product_name}`;
-				post = `GPU${gpu}: WARNING: not all values are supported for NVIDIA yet!\n`;
+				vendorColored = `${ansi.FgGreen}NVIDIA${ansi.Reset}`;
+				teamColor = `${ansi.FgGreen}`; teamColorName='Green';
+				pre = `${ansi.FgCyan}GPU${gpu}:${ansi.Reset} ${ansi.FgGreen}${this.GPUs[gpu].nv.nvidia_smi_log.gpu.product_name}${ansi.Reset}`;
+				post = `${ansi.FgCyan}GPU${gpu}:${ansi.Reset} WARNING: not all values are supported for ${vendorColored} yet!${ansi.Reset}\n`;
 			  break;
 			case 'intel':
-				pre = `GPU${gpu}: WARNING: No Intel Support Yet!`; post=`${pre}\n`;
+				vendorColored = `${ansi.FgBrBlue}Intel${ansi.reset}`;
+				teamColor = `${ansi.FgBrBlue}`; teamColorName='Blue?';
+				pre = `${ansi.FgCyan}GPU${gpu}:${ansi.Reset} WARNING: No ${vendorColored} Support Yet!`; post=`${pre}\n`;
 			  break;
 			default:
-				pre = `GPU${gpu}: WARNING: Unknown GPU Type!!`; post=`${pre}\n`;
+				pre = `${ansi.FgCyan}GPU${gpu}:${ansi.Reset} WARNING: Unknown GPU Type!!`; post=`${pre}\n`;
 		}		
+
+		if (this.GPUs[gpu].gpu_temperatureC >= 0) tempColor=ansi.FgGreen;
+		if (this.GPUs[gpu].gpu_temperatureC >= 40) tempColor=ansi.FgBrGreen;
+		if (this.GPUs[gpu].gpu_temperatureC >= 50) tempColor=ansi.FgYellow;
+		if (this.GPUs[gpu].gpu_temperatureC >= 60) tempColor=ansi.FgBrYellow;
+		if (this.GPUs[gpu].gpu_temperatureC >= 65) tempColor=ansi.FgRed;
+		if (this.GPUs[gpu].gpu_temperatureC >= 70) tempColor=ansi.FgBrRed;
 
 		const statusTemplate =
 ///////////////////////////////////////////////////////////////////////////////
@@ -1291,31 +1371,31 @@ Examples:
 ///////////////////////////////////////////////////////////////////////////////
 `
 ${pre}
-GPU${gpu}: ${this.GPUs[gpu].vendorName.toUpperCase()} Driver Version: ${this.GPUs[gpu].driver_version}
-GPU${gpu}: VBIOS Version: ${this.GPUs[gpu].vbios_version}
-GPU${gpu}: PCIe Device Bus Address: ${this.GPUs[gpu].pcidevice} on IRQ ${this.GPUs[gpu].IRQ}
-GPU${gpu}: Link Speed is ${this.GPUs[gpu].pcilinkwidth}x [${this.GPUs[gpu].pcilinkspeed}] (Maximum is ${this.GPUs[gpu].maxpcilinkwidth}x [${this.GPUs[gpu].maxpcilinkspeed}])
-GPU${gpu}: Vendor ID: 0x${this.GPUs[gpu].vendorid} / ${this.GPUs[gpu].vendorName.toUpperCase()} 
-GPU${gpu}: Device ID: 0x${this.GPUs[gpu].deviceid} / ${this.GPUs[gpu].deviceName}
-GPU${gpu}: Sub-Vendor ID: 0x${this.GPUs[gpu].subvendorid} / ${this.GPUs[gpu].subvendorname}
-GPU${gpu}: Sub-Device ID: 0x${this.GPUs[gpu].subdeviceid} / ${this.GPUs[gpu].subdevicename}
-GPU${gpu}: Current GPU Usage is ${this.GPUs[gpu].gpu_busy}%
-GPU${gpu}: Current VRAM Activity is ${this.GPUs[gpu].mem_busy}%
-GPU${gpu}: VRAM Total: ${this.GPUs[gpu].memTotalMB} MiB (${this.GPUs[gpu].memTotal} bytes)
-GPU${gpu}: VRAM Used: ${this.GPUs[gpu].memUsedPercent}% used ${this.GPUs[gpu].memUsedMB} MiB (${this.GPUs[gpu].memUsed} bytes)
-GPU${gpu}: VRAM Free: ${this.GPUs[gpu].memFreePercent}% free ${this.GPUs[gpu].memFreeMB} MiB (${this.GPUs[gpu].memFree} bytes)
-GPU${gpu}: Temperature is ${this.GPUs[gpu].gpu_temperatureC} deg. C (${this.GPUs[gpu].gpu_temperatureF} deg. F)
-GPU${gpu}: Current GPU core speed is ${this.GPUs[gpu].gpu_mhz} mHz
-GPU${gpu}: Current memory speed is ${this.GPUs[gpu].mem_mhz} mHz
-GPU${gpu}: Available GPU clocks ${this.GPUs[gpu].gpuClocksPrintable}
-GPU${gpu}: Available Memory clocks ${this.GPUs[gpu].memoryClocksPrintable}
-GPU${gpu}: Current GPU Profile: ${this.GPUs[gpu].gpuClockProfile} @ ${this.GPUs[gpu].gpuProfileMhz} mHz (${this.GPUs[gpu].gpu_mhz} mHz actual)
-GPU${gpu}: Current Memory Profile: ${this.GPUs[gpu].memoryClockProfile} @ ${this.GPUs[gpu].memoryProfileMhz} mHz (${this.GPUs[gpu].mem_mhz} mHz actual)
-GPU${gpu}: Power limit is ${this.GPUs[gpu].powerLimitWatts} watts (Min: ${this.GPUs[gpu].powerLimitMinWatts} watts - Max: ${this.GPUs[gpu].powerLimitMaxWatts} watts)
-GPU${gpu}: Power usage is ${this.GPUs[gpu].powerUsageWatts} watts (${this.GPUs[gpu].powerUsage} mW)
-GPU${gpu}: Voltage is currently ${this.GPUs[gpu].vddgfx} mV (${this.GPUs[gpu].vddgfx/1000} V)
-GPU${gpu}: Fan speed for is ${this.GPUs[gpu].fan.percent}% (${this.GPUs[gpu].fan.rpm} RPM, Min: ${this.GPUs[gpu].fan.rpm_min} RPM - Max: ${this.GPUs[gpu].fan.rpm_max} RPM)
-GPU${gpu}: Fan control is set to ${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fan.mode == 'automatic')?"(target: "+this.GPUs[gpu].fan.target+" RPM)":''}
+${ansi.FgCyan}GPU${gpu}: ${teamColor}(Team ${teamColorName}) ${vendorColored}${teamColor} Driver Version: ${ansi.FgYellow}${this.GPUs[gpu].driver_version}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrRed} VBIOS Version: ${ansi.FgYellow}${this.GPUs[gpu].vbios_version}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} PCIe Device Bus Address: ${ansi.FgYellow}${this.GPUs[gpu].pcidevice}${ansi.FgBrBlue} @ ${ansi.FgYellow}IRQ ${this.GPUs[gpu].IRQ}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Link Speed is ${ansi.FgBrGreen}${this.GPUs[gpu].pcilinkwidth}x [${this.GPUs[gpu].pcilinkspeed}] ${ansi.FgBrBlue}(Maximum is ${ansi.FgBrGreen}${this.GPUs[gpu].maxpcilinkwidth}x [${this.GPUs[gpu].maxpcilinkspeed}]${ansi.FgBrBlue})
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Vendor ID: ${teamColor}0x${this.GPUs[gpu].vendorid} / ${vendorColored} 
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Device ID: ${teamColor}0x${this.GPUs[gpu].deviceid} / ${this.GPUs[gpu].deviceName}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Sub-Vendor ID: ${teamColor}0x${this.GPUs[gpu].subvendorid} / ${this.GPUs[gpu].subvendorname}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Sub-Device ID: ${teamColor}0x${this.GPUs[gpu].subdeviceid} / ${this.GPUs[gpu].subdevicename}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrGreen}GPU Usage${ansi.FgBrBlue} is ${ansi.FgBrCyan}${this.GPUs[gpu].gpu_busy}%
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrYellow}VRAM Activity${ansi.FgBrBlue} is ${ansi.FgBrCyan}${this.GPUs[gpu].mem_busy}%
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} VRAM Total: ${ansi.FgBrGreen}${this.GPUs[gpu].memTotalMB} MiB ${ansi.FgBrCyan}(${this.GPUs[gpu].memTotal} bytes)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} VRAM Used: ${ansi.FgBrGreen}${this.GPUs[gpu].memUsedPercent}% / ${this.GPUs[gpu].memUsedMB} MiB ${ansi.FgBrCyan}(${this.GPUs[gpu].memUsed} bytes)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} VRAM Free: ${ansi.FgBrGreen}${this.GPUs[gpu].memFreePercent}% / ${this.GPUs[gpu].memFreeMB} MiB ${ansi.FgBrCyan}(${this.GPUs[gpu].memFree} bytes)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Temperature is ${tempColor}${this.GPUs[gpu].gpu_temperatureC}°C (${this.GPUs[gpu].gpu_temperatureF}°F)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrGreen}GPU core speed${ansi.FgBrBlue} is ${ansi.FgBrCyan}${this.GPUs[gpu].gpu_mhz} mHz
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrYellow}memory speed${ansi.FgBrBlue} is ${ansi.FgBrCyan}${this.GPUs[gpu].mem_mhz} mHz
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Available ${ansi.FgBrGreen}GPU clocks${ansi.FgBrCyan} ${this.GPUs[gpu].gpuClocksPrintable}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Available ${ansi.FgBrYellow}Memory clocks${ansi.FgBrCyan} ${this.GPUs[gpu].memoryClocksPrintable}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrGreen}GPU Profile:${ansi.FgBrMagenta} ${this.GPUs[gpu].gpuClockProfile} ${ansi.FgBrCyan}@ ${this.GPUs[gpu].gpuProfileMhz} mHz (${this.GPUs[gpu].gpu_mhz} mHz actual)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrYellow}Memory Profile:${ansi.FgBrMagenta} ${this.GPUs[gpu].memoryClockProfile} ${ansi.FgBrCyan}@ ${this.GPUs[gpu].memoryProfileMhz} mHz (${this.GPUs[gpu].mem_mhz} mHz actual)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Power limit is ${ansi.FgBrGreen}${this.GPUs[gpu].powerLimitWatts} watts ${ansi.FgBrCyan}(Min: ${this.GPUs[gpu].powerLimitMinWatts} watts - Max: ${this.GPUs[gpu].powerLimitMaxWatts} watts)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Power usage is ${ansi.FgBrGreen}${this.GPUs[gpu].powerUsageWatts} watts ${ansi.FgBrCyan}(${this.GPUs[gpu].powerUsage} mW)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Voltage is currently ${ansi.FgBrGreen}${this.GPUs[gpu].vddgfx} mV ${ansi.FgBrCyan}(${this.GPUs[gpu].vddgfx/1000} V)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Fan speed for is ${ansi.FgBrGreen}${this.GPUs[gpu].fan.percent}% ${ansi.FgBrCyan}(${this.GPUs[gpu].fan.rpm} RPM, Min: ${this.GPUs[gpu].fan.rpm_min} RPM - Max: ${this.GPUs[gpu].fan.rpm_max} RPM)
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Fan control is set to ${ansi.FgBrYellow}${this.GPUs[gpu].fan.mode} ${(this.GPUs[gpu].fan.mode == 'automatic')?"(target: "+this.GPUs[gpu].fan.target+" RPM)":''}
 ${post}`;
 ///////////////////////////////////////////////////////////////////////////////
 

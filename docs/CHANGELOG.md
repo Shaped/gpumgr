@@ -8,4 +8,5 @@
 0.05a - 12/09/21 - some tidying up, build.sh updated for making release easier for me
 0.0.6-alpha - 12/10/21 - more tidying up for build stuff, version numbering now npm friendly
 0.0.7-alpha - 12/10/21 - basic power and fan management for both AMD and NVIDIA now working
+0.0.8-alpha - 12/10/21 - added a splash of color, ability to disable colors and the missing 'list' command
 ```

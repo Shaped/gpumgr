@@ -1,6 +1,6 @@
 {
 	"name": "gpumgr",
-	"version": "0.0.7-alpha",
+	"version": "0.0.8-alpha",
 	"description":"gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman.",
 	"author": {
 		"name": "Forbidden Era (Jai B.)",
