@@ -44,6 +44,5 @@ class logger {
     }
 };
 
-module.exports = (p) => {
-    return new logger(p);
-}
+//export { logger };
+module.exports = (p) => {return new logger(p);}

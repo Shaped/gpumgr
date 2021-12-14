@@ -1,32 +1,44 @@
 {
 	"name": "gpumgr",
-	"version": "0.0.8-alpha",
-	"description":"gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman.",
+	"version": "0.1.1-alpha",
+	"description": "gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman.",
 	"author": {
 		"name": "Forbidden Era (Jai B.)",
 		"email": "jai@shaped.ca",
 		"url": "https://github.com/Shaped/"
 	},
-	"private":"true",
-	"repository":"github:Shaped/gpumgr",
+	"private": "true",
+	"repository": "github:Shaped/gpumgr",
 	"license": "GPL-3.0-or-later",
 	"readme": "README.md",
-	"homepage":"https://github.com/Shaped/gpumgr",
-	"bugs":"https://github.com/Shaped/gpumgr/issues",
+	"homepage": "https://github.com/Shaped/gpumgr",
+	"bugs": "https://github.com/Shaped/gpumgr/issues",
 	"keywords": [
-		"amd", "amdgpu", "radeon",
-		"nvidia", "geforce", "rtx", "gtx",
-		"intel", "xe",
-		"gpu", "gpu management",
-		"linux", "fan", "fan control"
+		"amd",
+		"amdgpu",
+		"radeon",
+		"nvidia",
+		"geforce",
+		"rtx",
+		"gtx",
+		"intel",
+		"xe",
+		"gpu",
+		"gpu management",
+		"linux",
+		"fan",
+		"fan control"
 	],
-	"main":"src/gpumgr.js",
+	"main": "src/gpumgr.js",
 	"bin": {
 		"gpumgr": "src/gpumgr.js"
 	},
 	"pkg": {
 		"targets": [
-			"node10-linux-x64"
+			"node16-linux-x64"
+		],
+		"assets": [
+			"./src/**/*"
 		],
 		"outputPath": "bin"
 	},
@@ -35,11 +47,13 @@
 		"build-release": "./build.sh release"
 	},
 	"dependencies": {
+		"express": "^4.17.1",
+		"sass": "^1.45.0",
 		"xml2json": "^0.12.0"
 	},
 	"engines": {
-		"node": ">= 10.7.0",
-		"npm": ">= 6.0.0"
+		"node": ">= 17.0.0",
+		"npm": ">= 8.0.0"
 	},
 	"browserslist": [
 		"defaults",

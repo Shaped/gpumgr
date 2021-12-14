@@ -1,11 +1,10 @@
 #!/usr/bin/node
 /* 
 	gpumgr v0.0.8-alpha
-	(C) 2022 Shaped Technologies
+	gpumgr.js - gpumgr main class & entry point
+	(C) 2022 Shaped Technologies (forbiddenera/Jai B.)
 
-	gpumgr is based on amdpwrman which was originally only for amdgpus
-	this version will be for all types, but will start with amdgpus to
-	begin with
+	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
 
 "use strict";
@@ -13,37 +12,44 @@
 global.fsp = require('fs').promises;
 global.fs = require('fs');
 
-const util = require('util');
-const child = require('child_process');
-const path = require('path');
+global.cluster = require('cluster');
+global.cores = require('os').cpus().length;
 
-const exec = util.promisify(require('child_process').exec);
+global.util = require('util');
+global.child = require('child_process');
+global.path = require('path');
 
-const xmlParser = require('xml2json');
+global.exec = util.promisify(require('child_process').exec);
 
-const websocketHandler = require("./websocketHandler.js");
+global.xmlParser = require('xml2json');
 
-const asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
+global.asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 
-const $me = path.basename(process.argv[1]);
+global.$me = path.basename(process.argv[1]);
 
-const $version = `0.0.8-alpha`;
-const $copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
-const $license = `GPLv3 License`;
+global.$version = `0.0.8-alpha`;
+global.$copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
+global.$license = `GPLv3 License`;
+
+const webHandlerClass = require('./webHandler.js')
 
 class gpuManager {
 	constructor() {
-		this.GPUs = [];
 		this.logFile = `${$me}.log`;
+
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
 		process.on('SIGUSR2', this.handleSignal.bind(this));
+		process.on('uncaughtException', this.uncaughtExceptionHandler.bind(this));
+		process.on('unhandledRejection', this.unhandledRejectionHandler.bind(this));
 	}
 
 	async initialize() {
+		this.GPUs = [];
+
 		this.handleArgumentsEarly();
 		this.handleArguments();
 	}
@@ -59,25 +65,23 @@ class gpuManager {
 			case '__child':
 				logger.divertToFile();
 				this.childProcess = process;
-				this.startDaemon();
 		};
 	}
 
 	async handleArguments() {
-		process.argv[2] = (typeof process.argv[2] === 'undefined') ? 'help' : process.argv[2];
+		process.argv[2] = process.argv[2] ?? 'help';
 
-		(process.argv[2] != 'start' && process.argv[2] != 'stop')
-		? logger.log(`${$me} ${$version} starting..`):null;
+		(process.argv[2] != 'start' && process.argv[2] != 'stop' && process.argv[2] != 'restart' && process.argv[2] != 'force')
+		?logger.log(`${$me} ${$version} starting..`):null;
 
-		if (process.argv[process.argv.length-1] == '-g'
-		||  process.argv[process.argv.length-1] == '--no-colors') ansi.disableColor();
+		(process.argv[process.argv.length-1] == '-g' ||  process.argv[process.argv.length-1] == '--no-colors')
+		?ansi.disableColor():null;
 
 		switch (process.argv[2]) {
 			case 'show':
 			case 'fan':
 			case 'power':
-			case 'list':
-				await this.enumerateGPUs();
+			case 'list': await this.enumerateGPUs();
 		}
 
 		switch (process.argv[2]) {
@@ -91,9 +95,7 @@ class gpuManager {
 			case 'show'  : this.handleShowStatus(); break;
 			case 'list'  : this.handleListGPUs(); break;
 			case 'start':
-				await this.forkDaemon();
-				logger.divertToFile();
-				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
+				await this.forkOff();
 				process.exit();
 			  break;
 			case 'force':
@@ -103,7 +105,7 @@ class gpuManager {
 						await logger.log(`${$me} attempting to stop daemon [${pid}]`);
 						await this.killPID(pid);
 						await logger.log(`${$me} attempting to start new daemon...`);
-						await this.forkDaemon();
+						await this.forkOff();
 						await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 						process.exit();
 					  break;
@@ -112,6 +114,8 @@ class gpuManager {
 							let pid = await this.getChildPID();
 							await logger.log(`${$me} attempting to kill daemon [${pid}]`);
 							process.kill(pid, "SIGTERM");
+							await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+							process.exit();							
 						} catch (e) {
 							await logger.log(`${$me} unable to find daemon`);
 						}
@@ -122,7 +126,8 @@ class gpuManager {
 				try {
 					let pid = await this.getChildPID();
 					await logger.log(`${$me} attempting to restart daemon [${pid}]`);
-					process.kill(pid, "SIGUSR2");
+					await process.kill(pid, "SIGUSR2");
+					await logger.log(`${$me} sent signal to restart daemon [${pid}]`);
 				} catch (e) {
 					await logger.log(`${$me} unable to find daemon`);
 				}
@@ -132,6 +137,8 @@ class gpuManager {
 					let pid = await this.getChildPID();
 					await logger.log(`${$me} attempting to stop daemon [${pid}]`);
 					process.kill(pid, "SIGINT");
+					await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+					process.exit();
 				} catch (e) {
 					await logger.log(`${$me} unable to find daemon`);
 				}
@@ -139,7 +146,7 @@ class gpuManager {
 			case '__child':
 				process.on('beforeExit', this.nothingLeftToDo.bind(this));
 				process.on('exit', this.handleChildExit.bind(this));
-				await this.enumerateGPUs();
+				this.startDaemon();				
 			  break;
 			default:
 				console.log(`Command line argument not understood: '${process.argv[2]}'`);
@@ -179,6 +186,24 @@ class gpuManager {
 		});
 	}
 
+	uncaughtExceptionHandler(err, origin) {
+		logger.log(`Unhandled Exception: ${err}`);
+		logger.log(`Exception Origin: ${util.inspect(origin)}`);
+	
+		logger.log(`Exiting!`);
+
+		process.exit(1);
+	}
+
+	unhandledRejectionHandler(err, origin) {
+		logger.log(`Unhandled Rejection: ${err}`);
+		logger.log(`Rejection Origin: ${util.inspect(origin)}`);
+	
+		logger.log(`Exiting!`);
+
+		process.exit(1);
+	}
+
 	async handleSignal(signal) {
 		switch (signal) {
 			case 'SIGINT':
@@ -201,21 +226,42 @@ class gpuManager {
 	}
 
 	async startDaemon(restart = false) {
-		this.daemonInterval = setInterval(async()=>{
-			await logger.log(`Daemon Child Reporting`);
-		},5000);
+		this.webHandler = new webHandlerClass(this);
+
+		try {
+			this.webHandler.startListening();
+
+			if (cluster.isMaster) {
+				this.daemonInterval = setInterval(async()=>{
+					await logger.log(`Daemon Child Reporting`);
+					this.enumerateGPUs();
+				},5000);
+			}
+		} catch(e) {
+			logger.log(`Unable to listen: ${e}`)
+		}
 	}
 
 	async stopDaemon() {
+		this.webHandler.stopListening();
+		
 		clearInterval(this.daemonInterval);
 
 		await logger.log(`${$me} ${$version} daemon shutting down.`);
 	}
 
-	async forkDaemon(restart = false) {
-		if (typeof this.childProcess === 'undefined') {
-			this.childProcess = child.fork(__filename, ['__child'], {detached:true});
-			fs.writeFileSync(`/tmp/gpumgr.pid`, this.childProcess.pid);
+	async forkOff(restart = false) {
+		try {
+			fs.statSync(`/tmp/gpumgr.pid`)
+			logger.divertToFile();
+			logger.log(`PID file exists; daemon is likely already running.`)
+		} catch (e) {
+			(typeof this.childProcess === 'undefined') ?(
+				this.childProcess = child.fork(__filename, ['__child'], {detached:true}),
+				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)):null;
+				logger.divertToFile();
+
+				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 		}
 	}
 
@@ -223,8 +269,13 @@ class gpuManager {
 	nothingLeftToDo(code) { logger.log(`${$me} daemon shutting down..`); }
 
 	handleChildExit(code) {
-		fs.unlinkSync(`/tmp/gpumgr.pid`);
-		logger.log(`${$me} daemon exiting.`);
+		try {
+			fs.unlinkSync(`/tmp/gpumgr.pid`);
+		} catch(e){}
+
+		if (!cluster?.worker)
+			logger.log(`${$me} daemon exiting.`);
+
 		process.exit();
 	}
 
@@ -1402,6 +1453,4 @@ ${post}`;
 	}
 }
 
-let gpumgr = new gpuManager();
-
-gpumgr.initialize();
+(new gpuManager()).initialize();

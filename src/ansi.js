@@ -43,9 +43,8 @@ class ansi {
     disableColor() {
         let keys = Object.keys(this);
         for (let color of keys) this[color] = ``;
+        this.Reset = "\x1b[0m";
     }
 };
 
-module.exports = (p) => {
-    return new ansi(p);
-}
+module.exports = (p) => { return new ansi(p); }
