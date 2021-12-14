@@ -1,5 +1,7 @@
 .tarignore
 src/*.log
+assets/pub/css/*
+assets/pub/js/*
 node_modules
 docs/README.md
 release
