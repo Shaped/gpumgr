@@ -49,6 +49,7 @@
 	"dependencies": {
 		"express": "^4.17.1",
 		"sass": "^1.45.0",
+		"saxon-js": "^2.3.0",
 		"xml2json": "^0.12.0"
 	},
 	"engines": {

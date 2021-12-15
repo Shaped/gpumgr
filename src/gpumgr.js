@@ -13,7 +13,6 @@ global.fsp = require('fs').promises;
 global.fs = require('fs');
 
 global.cluster = require('cluster');
-global.cores = require('os').cpus().length;
 
 global.util = require('util');
 global.child = require('child_process');
@@ -31,7 +30,7 @@ global.$version = `0.0.8-alpha`;
 global.$copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 global.$license = `GPLv3 License`;
 
-const webHandlerClass = require('./webHandler.js')
+const webHandlerClass = require('./webHandler.js');
 
 class gpuManager {
 	constructor() {
@@ -101,12 +100,17 @@ class gpuManager {
 			case 'force':
 				switch (process.argv[3]) {
 					case 'restart':
-						let pid = await this.getChildPID();
-						await logger.log(`${$me} attempting to stop daemon [${pid}]`);
-						await this.killPID(pid);
-						await logger.log(`${$me} attempting to start new daemon...`);
-						await this.forkOff();
-						await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
+						try {
+							let pid = await this.getChildPID();
+							await logger.log(`${$me} attempting to stop daemon [${pid}]`);
+							await this.killPID(pid);
+							await logger.log(`${$me} attempting to start new daemon...`);
+							await this.forkOff();
+							await logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
+						} catch (e) {
+							await logger.log(`${$me} unable to find daemon`);
+						}
+						
 						process.exit();
 					  break;
 					case 'stop':
@@ -119,6 +123,8 @@ class gpuManager {
 						} catch (e) {
 							await logger.log(`${$me} unable to find daemon`);
 						}
+						
+						process.exit();
 					  break;
 				}
 			  break;
@@ -226,17 +232,17 @@ class gpuManager {
 	}
 
 	async startDaemon(restart = false) {
-		this.webHandler = new webHandlerClass(this);
+		this.webHandler = new webHandlerClass({_parent:this});//TODO:take cmd line port and host and threads and stuff it here 
 
 		try {
-			this.webHandler.startListening();
+			this.webHandler.startListening();//TODO:take port/host from commandline and stuff it here
 
-			if (cluster.isMaster) {
+/*			if (cluster.isMaster) { // cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
 				this.daemonInterval = setInterval(async()=>{
 					await logger.log(`Daemon Child Reporting`);
 					this.enumerateGPUs();
 				},5000);
-			}
+			}*/
 		} catch(e) {
 			logger.log(`Unable to listen: ${e}`)
 		}
@@ -496,6 +502,7 @@ class gpuManager {
 	}
 
 	async enumerateGPUs() {
+		this.GPUs=[];
 		logger.log(`Enumerating GPUs..`);
 		let entries = await fsp.readdir(`/sys/class/drm`);
 
@@ -516,6 +523,7 @@ class gpuManager {
 			let subdeviceid = await this.getPCISubDeviceID(gpu);
 
 			let vendorName = 'unknown';
+			let productName = 'unknown';
 
 			let hwmon = 'unknown';
 			let nv = 'unknown';
@@ -529,6 +537,7 @@ class gpuManager {
 					vendorName = 'nvidia';
 					let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);
 					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
+					productName = nv.nvidia_smi_log.gpu.product_name;
 				  break;
 				case `8086`:
 					vendorName = 'intel';
@@ -545,6 +554,7 @@ class gpuManager {
 				pcidevice: pcidevice,
 				vendorid: vendorid,
 				vendorName: vendorName,
+				productName: productName,
 				subvendorid: subvendorid,
 				subdeviceid: subdeviceid,
 				deviceid: deviceid
@@ -1336,7 +1346,8 @@ Usage:
                    			(eg. 1969, default is 4242)
       --host <ip>    			Set which ipv4 host to listen on.
                    			(eg. 0.0.0.0 or 127.0.0.1)
-
+      --threads <#>    			Number of threads for local service
+                   			(defaults to number of cores, upto 4)
 Examples:
 
   ${$me} show nvidia               	Show status of all Nvidia GPUs
