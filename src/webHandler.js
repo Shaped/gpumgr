@@ -83,7 +83,7 @@ class webHandler {
 	compileSCSS(scssfile, cssfile) {
 		logger.log(`SCSS Cache Miss | Compiling ${scssfile}`);
 		let rendered = sass.renderSync({ file: `../assets/styles/scss/${scssfile}` }).css;
-		fs.writeFileSync(`../assets/pub/css/${cssfile}`, rendered);
+		fs.writeFileSync(`../assets/pub/css/${cssfile}`, rendered, 'utf8');
 		return rendered;
 	}
 
@@ -149,6 +149,22 @@ class webHandler {
 		}
 	}
 
+	compileXSLT(template) {
+		let sefFile = template.replace(`.xsl`,`.sef.json`)
+		
+		const env = saxon.getPlatform();
+		
+		const doc = env.parseXmlFromString(env.readFile(`../assets/styles/xsl/${template}`));
+
+		logger.log(`load/parse xsl done`);
+		doc._saxonBaseUri = "file:///"; // ?from.s.o.? hack: avoid error "Required cardinality of value of parameter $static-base-uri is exactly one; supplied value is empty"
+
+		let sef = saxon.compile(doc);
+
+		fs.writeFileSync(`../assets/cache/sef/${sefFile}`, JSON.stringify(sef), `utf8`);
+
+	  return sef;
+	}					
 
 	async route_index(req,res) {
 		await this.parent.enumerateGPUs();
@@ -158,7 +174,6 @@ class webHandler {
 		};
 
 		for (let gpu of this.parent.GPUs) {
-			console.log(util.inspect(gpu))
 			data.GPUs[`gpu-${gpu.gpu}`] = {
 				gpu:gpu
 			};
@@ -168,14 +183,47 @@ class webHandler {
 
 		try {
 			let xmlData = x2j.toXml(data); // wasn't the whole point of saxon that it was suppose to take json stuffed in?
+			
+			let template = `default.xsl`;
 
-			const env = saxon.getPlatform();
+			var sef=null;
 
-			const doc = env.parseXmlFromString(env.readFile(`../assets/styles/xsl/default.xsl`));
-			logger.log(`load/parse xsl done`);
-			doc._saxonBaseUri = "file:///"; // ?from.s.o.? hack: avoid error "Required cardinality of value of parameter $static-base-uri is exactly one; supplied value is empty"
+			let sefFile = template.replace(`.xsl`,`.sef.json`)
 
-			const sef = saxon.compile(doc); // we need to cache our sefs if using saxon
+			try {
+				var sefStat = fs.statSync(`../assets/cache/sef/${sefFile}`);
+			} catch(e) {
+				if (e.code == "ENOENT") { // sef cache doesn't exist
+					logger.log(`sef cache miss, must compile ${template}`);
+					sef = this.compileXSLT(template);
+				} else {
+					throw new Error(`Unknown Error trying to read ${template}: ${e}`);
+				}
+			}
+
+			try {
+				var xslStat = fs.statSync(`../assets/styles/xsl/${template}`);
+			} catch (e) {
+				if (e.code == "ENOENT") { // xsl file doesn't exist?? if we have a sef we can stil transform
+					if (typeof sefStat !== 'undefined') {
+						logger.log(`Warning: Original XSLT doesn't exist!! trying to fall back on to sef ${sefFile}`);
+						sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
+						logger.log(`sef cache hit for ${sefFile}`);
+					} else {
+						throw new Error(`404 - ${template}`);
+					}
+				} else {
+					throw new Error(`Unknown Error trying to read ${template}: ${e}`);
+				}
+			}
+
+			if (sef == null && xslStat.mtimeMs > sefStat.mtimeMs) {
+				logger.log(`sef cache miss, must compile ${template}`);
+				sef = this.compileXSLT(template);
+			} else {
+				logger.log(`sef cache hit ${sefFile}`);
+				sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
+			}
 
 			const resultStringXML = saxon.transform({
 						stylesheetInternal: sef,
