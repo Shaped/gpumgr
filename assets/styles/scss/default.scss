@@ -2,6 +2,18 @@ $primary: #000;
 $secondary: #333555;
 $background: #fff;
 
+$lightShades: #E7F0C3;
+$lightAccent: #F0CF85;
+$mainBrand: #5BBFBA;
+$mainAccent: #A4D4AE;
+$darkShades: #5F6CAF;
+$darkAccent: #CC6C65;
+
+$darkGrey: rgb(32,32,32);
+$medGrey: rgb(64,64,64);
+$lightGrey: rgb(128,128,128);
+$lighterGrey: rgb(224,224,224);
+
 $break-narrow: 360px;
 $break-mid:	800px;
 $break-wide: 1260px;
@@ -118,6 +130,49 @@ main table.gpuTable thead tr {
 
 main table.gpuTable tbody tr:hover {
 	background-color: rgb(222,222,222);
+}
+
+main div.cardWrapper {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+main div.card {
+	@include no-select;
+	color: $darkShades;
+	min-width: 400px;
+	padding: 1em;
+	padding-top:0;
+	margin: 1em;
+	border-radius: 1em;
+	box-shadow: 4px 4px 12px rgba(0,0,0,0.2);
+	flex-grow: 1;
+	transition: box-shadow 0.333s;
+	flex-basis: calc(33% - 2em);
+}
+
+main div.card h1 {
+	font-size: 1.5em;
+}
+
+main div.card:hover {
+	box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
+}
+
+main div.card.half {
+	max-width: initial;
+	flex-basis: calc(50% - 2em);
+}
+
+main div.card.wide {
+	max-width: initial;
+	flex-basis: calc(66% - 2em);
+}
+
+main div.card.full {
+	max-width: initial;
+	flex-basis: 100%;	
 }
 
 footer {

@@ -51,31 +51,35 @@
 	</div>
 </header>
 <main>
-	<h2>GPUs Found:</h2>
-	<table class="gpuTable">
-		<thead>
-			<tr>
-				<td>ID</td>
-				<td>Vendor</td>
-				<td>PCI Bus ID</td>
-				<td>VendorID:DeviceID</td>
-				<td>SubVendorID:SubDeviceID</td>
-				<td>Name</td>
-			</tr>
-		</thead>
-		<tbody>
-			<xsl:for-each select="GPUs/*">
-				<tr>
-					<td><xsl:value-of select="gpu/@gpu" /></td>
-					<td><xsl:value-of select="gpu/@vendorName" /></td>
-					<td><xsl:value-of select="gpu/@pcidevice" /></td>
-					<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
-					<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
-					<td><xsl:value-of select="gpu/@productName" /></td>
-				</tr>
-			</xsl:for-each>
-		</tbody>
-	</table>
+	<div class="cardWrapper">
+		<div class="card wide">
+			<h2>GPUs Found:</h2>
+			<table class="gpuTable">
+				<thead>
+					<tr>
+						<td>ID</td>
+						<td>Vendor</td>
+						<td>PCI Bus ID</td>
+						<td>VendorID:DeviceID</td>
+						<td>SubVendorID:SubDeviceID</td>
+						<td>Name</td>
+					</tr>
+				</thead>
+				<tbody>
+					<xsl:for-each select="GPUs/*">
+						<tr>
+							<td><xsl:value-of select="gpu/@gpu" /></td>
+							<td><xsl:value-of select="gpu/@vendorName" /></td>
+							<td><xsl:value-of select="gpu/@pcidevice" /></td>
+							<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
+							<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
+							<td><xsl:value-of select="gpu/@productName" /></td>
+						</tr>
+					</xsl:for-each>
+				</tbody>
+			</table>
+		</div>
+	</div>
 </main>
 <footer>
 	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr</a>&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>
