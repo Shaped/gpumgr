@@ -1,4 +1,5 @@
 .tarignore
+bin/*
 src/*.log
 node_modules
 docs/README.md
