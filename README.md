@@ -18,6 +18,14 @@ AMD GPUs need the amdgpu or amdgpu-pro drivers, mostly interfaces with *sysfs*.
 
 Nvidia GPUs need the official Nvidia drivers, mostly interfaces with *nvidia-smi* and *nvidia-settings*. Changing clocks will most likely require X as I'm not aware of a way to do it aside from *nvidia-settings* and that requires X.
 
+### Screenshots
+
+#### Command Line Interface
+![CLI Screenshot](https://shaped.ca/gpumgr-ss-0.jpg)
+
+#### Web Interface (Work-in-progress)
+![Web Screenshot](https://shaped.ca/gpumgr-ss-1.jpg)
+
 ### Building & Binary
 
 There's also a binary compiled/packaged verison for Linux in *bin/*, this has been compiled/"packaged" with *[pkg](https://github.com/vercel/pkg)* and is simply there so you have a quick option to get up and running without having to install NodeJS or any dependencies.
