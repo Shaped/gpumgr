@@ -132,3 +132,4 @@ Examples:
 - can we set custom amd clock easily, rather than selecting profiles?
   - should we have any amdgpu flashing features? (low priority)
   - could potentially make custom BIOS on the fly? (low priority)
+ 
