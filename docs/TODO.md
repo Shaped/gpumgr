@@ -1,12 +1,26 @@
 ### TODO.md
 
-- finish implementing all amdgpu features from amdpwrman
-- implement as much original^ functionality as possible for nvidia
-- ^ same for intel
-- start on web interface stuff
+- web interface stuff
+  - is started, needs more work
+  - websockets
+    - copy over ff websocket implementation
+    - ** get it working on ws:// not wss:// b/c local app/certs stuff ??
+    - this means no mixed stuff? meaning - we can't have *any* remote resources hosted on https!!
+      - only ways around are:
+        - create a self-signed certificate, user must accept warning - bad
+        - create a self-signed certificate and ask user to install to local cert store - not great, but most "proper"
+        - make a subdomain point to 127.0.0.1 and get a real cert - seems very bad
+        	- man in the middle possible with remote dns though unlikely
+        	- subdomain has to resolve locally - requires net or entry in hosts
+        	- worse, we have to distribute the private key which opens up other attacks
+        - or, don't use a local cert and don't have any remote https resources?
+  - jsx compilation & caching
+    - get babel working for react/jsx
+    - js variable replacing/ejs templates?
+  - ** cache google fonts; we can't load them remotely over https without a cert/being on https ourselves
 - add ability to change clocks and other features
-- is there *any* way to change NVIDIA clocks without X?
+  - is there *any* way to change NVIDIA clocks without X?
   - I haven't seen anything really, although the amdpwrman reddit thread had some links to other programs doing good things
-- can we set custom amd clock easily, rather than selecting profiles?
-  - should we have any amdgpu flashing features? (low priority)
-  - could potentially make custom BIOS on the fly? (low priority)
+  - can we set custom amd clock easily, rather than selecting profiles?
+- should we have any amdgpu flashing features? (super low priority)
+  - could potentially make custom amd BIOSes for flashing? (super low priority)
