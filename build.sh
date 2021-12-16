@@ -189,7 +189,7 @@ else
 					echo
 					echo "Would you like to push repo to GitHub? Make sure you've made all commits first!"
 					echo
-					read -r -p "Are you sure you want to push to GitHub.IO? [y/N] " response
+					read -r -p "Are you sure you want to push to GitHub.com? [y/N] " response
 					case "$response" in
 						[yY][eE][sS]|[yY])
 							echo "About to push to GitHub!"
