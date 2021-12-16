@@ -28,11 +28,41 @@ Nvidia GPUs need the official Nvidia drivers, mostly interfaces with *nvidia-smi
 
 ### Building & Binary
 
+#### Note: Binary release is currently broken; will be re-posted as a release when fixed.
+
 There's also a binary compiled/packaged verison for Linux in *bin/*, this has been compiled/"packaged" with *[pkg](https://github.com/vercel/pkg)* and is simply there so you have a quick option to get up and running without having to install NodeJS or any dependencies.
 
 Don't trust the binary? No problem! You can easily just run the script directly or build it yourself; run `build.sh` or `npm run build` with *[pkg](https://github.com/vercel/pkg)* installed and your binary will pop out in *bin/* - technically, you don't need NodeJS installed to do the build even as *[pkg](https://github.com/vercel/pkg)* will download the appropriate binaries; however, installing *[pkg](https://github.com/vercel/pkg)* requires npm which requires NodeJS..? You can easily build for other versions of NodeJS than what you have installed though.
 
 You'll want to run `npm ci` to download the appropriate npm packages if you want to run from source or build. `npm run build` will also build a binary for you.
+
+#### Install & Build Commands:
+
+To download:
+
+```
+git clone https://github.com/Shaped/gpumgr.git
+cd gpumgr
+npm ci
+```
+
+Once that's done, you can either run the script directly or build the binary with `build.sh`.
+
+To run directly:
+```
+cd src
+chmod 755 ./gpumgr.js
+./gpumgr.js
+```
+
+To build and run:
+```
+npm install pkg
+./build.sh
+cd bin
+chmod 755 ./gpumgr
+./gpumgr
+```
 
 ### Usage:
 
