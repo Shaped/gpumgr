@@ -21,10 +21,10 @@ Nvidia GPUs need the official Nvidia drivers, mostly interfaces with *nvidia-smi
 ### Screenshots
 
 #### Command Line Interface
-![CLI Screenshot](https://shaped.ca/gpumgr-ss-0.jpg)
+![CLI Screenshot](https://shaped.ca/gpumgr-screenshot-0.jpg)
 
 #### Web Interface (Work-in-progress)
-![Web Screenshot](https://shaped.ca/gpumgr-ss-1.jpg)
+![Web Screenshot](https://shaped.ca/gpumgr-screenshot-1.jpg)
 
 ### Building & Binary
 
