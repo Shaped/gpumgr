@@ -21,6 +21,10 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 	<link rel="manifest" href="/app.webmanifest" />
+	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+	<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+
 	<link rel="stylesheet" type="text/css" href="css/default.css" />
 
 	<title><xsl:value-of select="$pageTitle" /></title>
