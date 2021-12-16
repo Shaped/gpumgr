@@ -70,10 +70,10 @@ class gpuManager {
 	async handleArguments() {
 		process.argv[2] = process.argv[2] ?? 'help';
 
-		(process.argv[2] != 'start' && process.argv[2] != 'stop' && process.argv[2] != 'restart' && process.argv[2] != 'force')
-		? (process.argv[2] == '__child' && cluster.isMaster)
-		? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
-		: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
+		(process.argv[2] == '__child') ?
+			(cluster.isMaster)
+			? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
+			: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
 		(process.argv[process.argv.length-1] == '-g' ||  process.argv[process.argv.length-1] == '--no-colors')
 		? ansi.disableColor():null;
