@@ -39,6 +39,8 @@ class gpuManager {
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
+		/*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
+
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
 		process.on('SIGUSR2', this.handleSignal.bind(this));
@@ -71,10 +73,12 @@ class gpuManager {
 		process.argv[2] = process.argv[2] ?? 'help';
 
 		(process.argv[2] != 'start' && process.argv[2] != 'stop' && process.argv[2] != 'restart' && process.argv[2] != 'force')
-		?logger.log(`${$me} ${$version} starting..`):null;
+		? (process.argv[2] == '__child' && cluster.isMaster)
+		? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
+		: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
 		(process.argv[process.argv.length-1] == '-g' ||  process.argv[process.argv.length-1] == '--no-colors')
-		?ansi.disableColor():null;
+		? ansi.disableColor():null;
 
 		switch (process.argv[2]) {
 			case 'show':
@@ -232,10 +236,13 @@ class gpuManager {
 	}
 
 	async startDaemon(restart = false) {
-		this.webHandler = new webHandlerClass({_parent:this});//TODO:take cmd line port and host and threads and stuff it here 
+		this.webHandler = new webHandlerClass({
+			_parent:this,
+			host:'0.0.0.0'/*::DEVELOPMENT::Don't release with 0.0.0.0*/
+		});//*::TODO:take cmd line port and host and threads and stuff it here 
 
 		try {
-			this.webHandler.startListening();//TODO:take port/host from commandline and stuff it here
+			this.webHandler.startListening();
 
 /*			if (cluster.isMaster) { // cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
 				this.daemonInterval = setInterval(async()=>{
@@ -503,7 +510,7 @@ class gpuManager {
 
 	async enumerateGPUs() {
 		this.GPUs=[];
-		logger.log(`Enumerating GPUs..`);
+		logger.log(LOG_LEVEL_VERBOSE, `Enumerating GPUs..`);
 		let entries = await fsp.readdir(`/sys/class/drm`);
 
 		entries = entries.filter((entry) => (entry.substr(0,4) == 'card' && entry.length == 5) ? true : false);
@@ -544,7 +551,7 @@ class gpuManager {
 				  break;
 			}
 
-			logger.log(`Found GPU${gpu} from ${vendorName} (${vendorid}:${deviceid})`);
+			logger.log(LOG_LEVEL_VERBOSE, `Found GPU${gpu} from ${vendorName} (${vendorid}:${deviceid})`);
 
 			let GPU = {
 				gpu: gpu,

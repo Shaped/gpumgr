@@ -29,6 +29,24 @@ else
 			echo
 			echo "build.sh will update the version numbers in source and README.md to v$2!"
 			echo
+
+			todocheck=$(grep -E \/\\*::TODO -o src/*.js | wc -l)
+
+			if [ "$todocheck" -gt 0 ]; then
+				echo "WARNING: Found ::TODO tags in source."
+				echo "Make sure you've double checked any *::TODO tags!!"
+				echo
+			fi
+
+			devcheck=$(grep -E \/\\*::DEVELOPMENT -o src/*.js | wc -l)
+
+			if [ "$devcheck" -gt 0 ]; then
+				echo "ERROR: UNABLE TO BUILD!! FAILED DEV TAG CHECK."
+				echo "Make sure you've checked and removed any *::DEVELOPMENT tags!!"
+				echo
+				exit
+			fi
+
 			read -r -p "Are you sure you want to continue? [y/N] " response
 			case "$response" in
 				[yY][eE][sS]|[yY])

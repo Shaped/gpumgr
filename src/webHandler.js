@@ -22,7 +22,7 @@ const x2j = require('xml2json');
 class webHandler {
 	constructor({
 		_parent = null,
-		host = '0.0.0.0',
+		host = '127.0.0.1',
 		port = 1969,
 		threads = -1
 	}={}) {
@@ -55,9 +55,11 @@ class webHandler {
 				}
 				resolve();
 			} else {
-				logger.log(`about to start listening ${this.host}:${this.port}`);
+				logger.log(LOG_LEVEL_DEBUG, `about to start listening ${this.host}:${this.port}`);
 				var app = new express();
 				
+				app.use(this.requestLogger.bind(this));
+
 				app.use(express.static('../assets/pub/www'));
 
 				app.use('/css/*', this.handleScssRequest.bind(this));
@@ -73,7 +75,7 @@ class webHandler {
 					signal: this.controller.signal
 				}, () => {
 					cluster.worker.on('message', this.workerMessage.bind(this));
-					logger.log(`started listening on ${this.host} @ ${this.port}`)
+					logger.log(LOG_LEVEL_MESSAGE, `started listening on ${this.host} @ ${this.port}`)
 					resolve();
 				})
 			}
@@ -81,14 +83,14 @@ class webHandler {
 	}
 
 	compileSCSS(scssfile, cssfile) {
-		logger.log(`SCSS Cache Miss | Compiling ${scssfile}`);
+		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Cache Miss | Compiling ${scssfile}`);
 		let rendered = sass.renderSync({ file: `../assets/styles/scss/${scssfile}` }).css;
 		fs.writeFileSync(`../assets/pub/css/${cssfile}`, rendered, 'utf8');
 		return rendered;
 	}
 
 	handleScssRequest(req, res, next) {
-		logger.log(`SCSS Request received for ${req.params[0]}`);
+		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Request received for ${req.params[0]}`);
 
 		let result=null;
 
@@ -111,7 +113,7 @@ class webHandler {
 			} catch (e) {
 				if (e.code == "ENOENT") { // scss file doesn't exist?? we can try and push regualr css if it exists, 
 					if (typeof css_stat !== 'undefined') {
-						logger.log(`SCSS doesn't exist, trying to fall back on to static ${req.params[0]}`);
+						logger.log(LOG_LEVEL_PRODUCTION, `SCSS doesn't exist, trying to fall back on to static ${req.params[0]}`);
 						result = fs.readFileSync(`../assets/pub/css/${req.params[0]}`);
 					} else {
 						throw new Error(`404 - ${req.params[0]}`);
@@ -134,8 +136,12 @@ class webHandler {
 		}
 	}
 
+	requestLogger(req,res,next) {
+		logger.log(LOG_LEVEL_MESSAGE, `Worker #${cluster.worker.id} has received a request [${req.url}] from ${req.headers.host}`);
+		next();		
+	}
+
 	handleRequest(req, res, next) {
-		logger.log(`Worker #${cluster.worker.id} has received a request from ${req.headers.host}`);
 		let params = req.url.split('/');
 
 		switch (params[1]) {
@@ -151,18 +157,15 @@ class webHandler {
 
 	compileXSLT(template) {
 		let sefFile = template.replace(`.xsl`,`.sef.json`)
-		
 		const env = saxon.getPlatform();
-		
 		const doc = env.parseXmlFromString(env.readFile(`../assets/styles/xsl/${template}`));
-
-		logger.log(`load/parse xsl done`);
 		doc._saxonBaseUri = "file:///"; // ?from.s.o.? hack: avoid error "Required cardinality of value of parameter $static-base-uri is exactly one; supplied value is empty"
 
+		logger.log(LOG_LEVEL_DEBUG, `load/parse xsl done, about to compile`);
 		let sef = saxon.compile(doc);
+		logger.log(LOG_LEVEL_DEBUG, `compilation complete, saving sefcache`);
 
 		fs.writeFileSync(`../assets/cache/sef/${sefFile}`, JSON.stringify(sef), `utf8`);
-
 	  return sef;
 	}					
 
@@ -179,7 +182,7 @@ class webHandler {
 			};
 		}
 
-		logger.log(`About to process XSLT with ${util.inspect(data)}`);
+		logger.log(LOG_LEVEL_DEBUG, `About to process XSLT with ${util.inspect(data)}`);
 
 		try {
 			let xmlData = x2j.toXml(data); // wasn't the whole point of saxon that it was suppose to take json stuffed in?
@@ -194,7 +197,7 @@ class webHandler {
 				var sefStat = fs.statSync(`../assets/cache/sef/${sefFile}`);
 			} catch(e) {
 				if (e.code == "ENOENT") { // sef cache doesn't exist
-					logger.log(`sef cache miss, must compile ${template}`);
+					logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache miss, must compile ${template}`);
 					sef = this.compileXSLT(template);
 				} else {
 					throw new Error(`Unknown Error trying to read ${template}: ${e}`);
@@ -206,9 +209,9 @@ class webHandler {
 			} catch (e) {
 				if (e.code == "ENOENT") { // xsl file doesn't exist?? if we have a sef we can stil transform
 					if (typeof sefStat !== 'undefined') {
-						logger.log(`Warning: Original XSLT doesn't exist!! trying to fall back on to sef ${sefFile}`);
+						logger.log(LOG_LEVEL_PRODUCTION, `Warning: Original XSLT doesn't exist!! trying to fall back on to sef ${sefFile}`);
 						sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
-						logger.log(`sef cache hit for ${sefFile}`);
+						logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache hit for ${sefFile}`);
 					} else {
 						throw new Error(`404 - ${template}`);
 					}
@@ -218,17 +221,17 @@ class webHandler {
 			}
 
 			if (sef == null && xslStat.mtimeMs > sefStat.mtimeMs) {
-				logger.log(`sef cache miss, must compile ${template}`);
+				logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache miss, must compile ${template}`);
 				sef = this.compileXSLT(template);
 			} else {
-				logger.log(`sef cache hit ${sefFile}`);
+				logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache hit ${sefFile}`);
 				sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
 			}
 
 			const resultStringXML = saxon.transform({
 						stylesheetInternal: sef,
 						sourceText: xmlData,
-						//sourceType: 'json',
+						//sourceType: 'json', // again: wasn't the whole point of saxon that it was suppose to take json stuffed in?
 						destination: "serialized",
 						   stylesheetParams: {
 						      "pageTitle": [["gpumgr"]],
@@ -263,26 +266,22 @@ class webHandler {
 
 	stopListening() {
 		this.controller.abort();
-		logger.log(`stopped listening`);
+		logger.log(LOG_LEVEL_DEBUG, `stopped listening`);
 	}
 
-	workerListening(worker, ev) {
-		logger.log(`worker ${worker.id} listening ${util.inspect(ev)}`)
-	}
+	workerListening(worker, ev) { logger.log(LOG_LEVEL_DEVELOPMENT, `worker ${worker.id} listening ${util.inspect(ev)}`) }
 
-	workerDisconnect(worker, ev) { logger.log(`worker ${worker.id} disconnect ${util.inspect(worker)}`) }
+	workerDisconnect(worker, ev) { logger.log(LOG_LEVEL_DEBUG, `worker ${worker.id} disconnect ${util.inspect(worker)}`) }
 
-	workerError(worker, err) { logger.log(`worker ${worker.id} error ${util.inspect(err)}`) }
+	workerError(worker, err) { logger.log(LOG_LEVEL_PRODUCTION, `worker ${worker.id} error ${util.inspect(err)}`) }
 
 	workerExit(code, signal)  {
 		(signal) 
-		?logger.log(`worker was killed by signal: ${signal}`)
-		:logger.log(`worker exited with error code: ${code}`);
+		?logger.log(LOG_LEVEL_PRODUCTION, `worker was killed by signal: ${signal}`)
+		:logger.log(LOG_LEVEL_PRODUCTION, `worker exited with error code: ${code}`);
 	}
 
-	workerMessage(msg) {
-		logger.log(`received a msg: ${msg}`)
-	}
+	workerMessage(msg) { logger.log(LOG_LEVEL_DEBUG, `received a msg: ${msg}`) }
 };
 
 module.exports = webHandler;

@@ -53,31 +53,40 @@
 <main>
 	<div class="cardWrapper">
 		<div class="card wide">
-			<h2>GPUs Found:</h2>
-			<table class="gpuTable">
-				<thead>
-					<tr>
-						<td>ID</td>
-						<td>Vendor</td>
-						<td>PCI Bus ID</td>
-						<td>VendorID:DeviceID</td>
-						<td>SubVendorID:SubDeviceID</td>
-						<td>Name</td>
-					</tr>
-				</thead>
-				<tbody>
-					<xsl:for-each select="GPUs/*">
-						<tr>
-							<td><xsl:value-of select="gpu/@gpu" /></td>
-							<td><xsl:value-of select="gpu/@vendorName" /></td>
-							<td><xsl:value-of select="gpu/@pcidevice" /></td>
-							<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
-							<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
-							<td><xsl:value-of select="gpu/@productName" /></td>
-						</tr>
-					</xsl:for-each>
-				</tbody>
-			</table>
+			<xsl:choose>
+				<xsl:when test="GPUs/*">
+					<h2>GPUs Found:</h2>
+					<table class="gpuTable">
+						<thead>
+							<tr>
+								<td>ID</td>
+								<td>Vendor</td>
+								<td>PCI Bus ID</td>
+								<td>VendorID:DeviceID</td>
+								<td>SubVendorID:SubDeviceID</td>
+								<td>Name</td>
+							</tr>
+						</thead>
+						<tbody>
+							<xsl:for-each select="GPUs/*">
+								<tr>
+									<td><xsl:value-of select="gpu/@gpu" /></td>
+									<td><xsl:value-of select="gpu/@vendorName" /></td>
+									<td><xsl:value-of select="gpu/@pcidevice" /></td>
+									<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
+									<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
+									<td><xsl:value-of select="gpu/@productName" /></td>
+								</tr>
+							</xsl:for-each>
+						</tbody>
+					</table>
+				</xsl:when>
+				<xsl:otherwise>
+					<h2>No GPUs were found!</h2>
+					<p>You can check the gpumgr log for hints, also check that your GPU drivers are correctly installed.</p>
+					<p>gpumgr shouldn't need special permission to list GPUs, however, it will need <em>root</em> access to modify any settings.</p>
+				</xsl:otherwise>
+			</xsl:choose>
 		</div>
 	</div>
 </main>
