@@ -37,7 +37,7 @@ class gpuManager {
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
-		/*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
+		// /*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
@@ -70,8 +70,8 @@ class gpuManager {
 	async handleArguments() {
 		process.argv[2] = process.argv[2] ?? 'help';
 
-		(process.argv[2] == '__child') ?
-			(cluster.isMaster)
+		(process.argv[2] == '__child')
+		? (cluster.isMaster)
 			? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
 			: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
@@ -1289,8 +1289,7 @@ class gpuManager {
 ///////////////////////////////////////////////////////////////////////////////
 // Usage CLI Template                                                        //
 ///////////////////////////////////////////////////////////////////////////////
-`
-${$me} v${$version}     ${$copyright}       ${$license}
+`${$me} v${$version}     ${$copyright}       ${$license}
 
 ${$me} shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
