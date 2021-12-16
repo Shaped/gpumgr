@@ -12,8 +12,6 @@ const sass = require('sass');
 const saxon = require('saxon-js');
 const x2j = require('xml2json');
 
-const cores = require('os').cpus().length;
-
 class webHandler {
 	constructor({
 		_parent = null,
@@ -70,7 +68,7 @@ class webHandler {
 					signal: this.controller.signal
 				}, () => {
 					cluster.worker.on('message', this.workerMessage.bind(this));
-					logger.log(LOG_LEVEL_MESSAGE, `started listening on ${this.host} @ ${this.port}`)
+					logger.log(LOG_LEVEL_VERBOSE, `started listening on ${this.host} @ ${this.port}`)
 					resolve();
 				})
 			}
@@ -129,9 +127,14 @@ class webHandler {
 				try {
 					var cache_stat = fs.statSync(`../assets/cache/css/${req.params[0]}`);
 				} catch (e) {
-					if (result == null && e.code == "ENOENT") {// css cached file doesn't exist, we need to render
-						result = this.compileSCSS(req.params[0]);
-					} else if (result == null) throw new Error(`Unknown Error trying to read cache/css/${req.params[0]}: ${e}`);					
+					try {
+						if (result == null && e.code == "ENOENT") {// css cached file doesn't exist, we need to render
+							result = this.compileSCSS(req.params[0]);
+						} else if (result == null) throw new Error(`Unknown Error trying to read cache/css/${req.params[0]}: ${e}`);
+					} catch (e) {
+						logger.log(LOG_LEVEL_PRODUCTION, `Unable to compile ${scssfile}`);
+						logger.log(LOG_LEVEL_DEBUG, util.inspect(e));
+					}
 				}
 
 				try {
@@ -145,14 +148,15 @@ class webHandler {
 					} else throw new Error(`Unknown Error trying to read styles/scss/${req.params[0]}: ${e}`);
 				}
 	
-				if (scss_stat.mtimeMs > cache_stat.mtimeMs) result = this.compileSCSS(req.params[0]);
+				if (result == null && scss_stat.mtimeMs > cache_stat.mtimeMs) result = this.compileSCSS(req.params[0]);
 				else result = fs.readFileSync(`../assets/cache/css/${req.params[0]}`);
 			}
 
 			res.type(`text/css`);
 			res.send( result );
 		} catch (e) {
-			logger.log(util.inspect(e));
+			logger.log(LOG_LEVEL_PRODUCTION, e);
+			logger.log(LOG_LEVEL_DEBUG, util.inspect(e));
 			res.type('text/html').status(404).send('404 Error');
 		}
 	}

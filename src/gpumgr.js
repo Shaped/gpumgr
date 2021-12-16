@@ -17,6 +17,7 @@ global.cluster = require('cluster');
 global.util = require('util');
 global.child = require('child_process');
 global.path = require('path');
+global.cores = require('os').cpus().length;
 
 global.exec = util.promisify(require('child_process').exec);
 
@@ -27,17 +28,21 @@ global.asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 global.$me = path.basename(process.argv[1]);
 
 global.$version = `0.0.8-alpha`;
-global.$copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
+global.$copyright = `(C) Shaped Technologies`;
 global.$license = `GPLv3 License`;
 
 class gpuManager {
 	constructor() {
 		this.logFile = `${$me}.log`;
 
+		this.serviceHost = `0.0.0.0`;/*::DEVELOPMENT::Don't release with 0.0.0.0, change to 127.0.0.1!! */
+		this.servicePort = 1969;
+		this.serviceThreads = -1;
+
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
-		// /*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
+		/*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
@@ -58,13 +63,13 @@ class gpuManager {
 			case 'start':
 				logger.divertToFile();
 			  break;
-		};
+		}
 
 		switch (process.argv[2]) {
 			case '__child':
 				logger.divertToFile();
 				this.childProcess = process;
-		};
+		}
 	}
 
 	async handleArguments() {
@@ -102,7 +107,7 @@ class gpuManager {
 			case 'force':
 				switch (process.argv[3]) {
 					case 'restart':
-						try {
+						try {//*::TODO:: Figure out a way to save options (host/port/threads) on a force restart? or at very least (or both) allow to set options on force restart.
 							let pid = await this.getChildPID();
 							await logger.log(`${$me} attempting to stop daemon [${pid}]`);
 							await this.killPID(pid);
@@ -236,10 +241,69 @@ class gpuManager {
 	async startDaemon(restart = false) {
 		const webHandlerClass = require('./webHandler.js');
 
-		this.webHandler = new webHandlerClass({
+		switch(process.argv[3]) {
+			case 'force':
+			  break;
+			case 'restart':
+			  break;
+			case 'start':
+				let [_1,_2,_3,_4,...args] = process.argv;
+				for (let i=0;i<args.length;i++) {
+					switch (args[i]) {
+						case '--port':
+							if (args[i+1].substr(0,1) != '-'
+								&& Number.isInteger(parseInt(args[i+1]))
+								&& parseInt(args[i+1]) >= 1001
+								&& parseInt(args[i+1]) <= 65534) {
+								let port = args.splice(i+1,1)[0];
+								this.servicePort = port;
+							} else {
+								logger.log(`Invalid argument for --port, '${args[i+1]}', port must be a number between 1001 and 65534`);
+								process.exit(1);								
+							}
+						  break;
+						case '--host':
+							if (args[i+1].substr(0,1) != '-') {
+								let host = args.splice(i+1,1)[0];
+								this.serviceHost = host;
+							} else {
+								logger.log(`Invalid argument for --host, '${args[i+1]}', host must be a valid IP assigned to a local interface. `,
+									`It's recommended to use the default of 127.0.0.1 unless you need to access from a remote PC. `,
+									`0.0.0.0 will listen on all local IPv4 address on all local interfaces, :: will listen on all `,
+									`local IPv4 and IPv6 interfaces.`);
+								process.exit(1);								
+							}
+						  break;
+						case '--threads':
+							if (args[i+1].substr(0,1) != '-'
+								&& Number.isInteger(parseInt(args[i+1]))
+								&& parseInt(args[i+1]) >= 1
+								&& parseInt(args[i+1]) <= (cores*2) ) {
+								let threads = args.splice(i+1,1)[0];
+								this.serviceThreads = threads;
+							} else {
+								logger.log(`Invalid argument for --threads, '${args[i+1]}', threads must be a number between 1 and ${cores*2} (# of logical CPU cores * 2)`);
+								process.exit(1);								
+							}						
+						  break;
+						default:
+					}
+				}
+			  break;
+			default:
+				logger.log(`Invalid argument ${process.argv[3]}`);
+				process.exit(1);
+		}
+
+		let options = {//*::TODO::take cmd line port and host and threads and stuff it here 
 			_parent:this,
-			host:'0.0.0.0'/*::DEVELOPMENT::Don't release with 0.0.0.0*/
-		});//*::TODO::take cmd line port and host and threads and stuff it here 
+			host: this.serviceHost,
+			port: this.servicePort
+		};
+
+		if (this.serviceThreads != -1) options.threads = this.serviceThreads;
+
+		this.webHandler = new webHandlerClass(options);
 
 		try {
 			this.webHandler.startListening();
@@ -269,10 +333,11 @@ class gpuManager {
 			logger.divertToFile();
 			logger.log(`PID file exists; daemon is likely already running.`)
 		} catch (e) {
+			let [_,__,...args] = process.argv;
 			(typeof this.childProcess === 'undefined') ?(
-				this.childProcess = child.fork(__filename, ['__child'], {detached:true}),
+				this.childProcess = child.fork(__filename, ['__child', ...args], {detached:true}),
 				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)):null;
-				logger.divertToFile();
+//				logger.divertToFile();
 
 				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 		}
@@ -1295,15 +1360,8 @@ ${$me} shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
 example, using the sysfs interface to interact with the amdgpu driver.
 
-The original script (amdpwrman) was designed to be simple, easy to use and have
-no dependencies, however, BASH scripting is kind of a pain so I decided to
-rewrite this as a NodeJS app with an included (optional to use) web interface.
-
-There will be an easy to use binary distribution of this, or you can just clone
-the repo and run or build the script yourself.
-
 Most commands will execute the command and exit. For example, using
-'./gpumgr fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply set
+'${$me} fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply set
 it once and exit.
 
 If you want fan speed monitoring or curve control or to use the web interface,

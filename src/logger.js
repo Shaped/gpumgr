@@ -15,18 +15,23 @@ global.LOG_LEVEL_DEVELOPMENT 	= 32;
 global.LOG_LEVEL_DEBUG 			= 64;
 
 class logger {
+	#parent;
+	#hrStart;
+	#currentLogLevel;
+	#defaultLogLevel;
+
 	constructor(_parent) {
-		this.parent = _parent;
-		this.hrStart = process.hrtime.bigint();
+		this.#parent = _parent;
+		this.#hrStart = process.hrtime.bigint();
 		this.logStore = [];
 		this.stdout = true;
 		
-		this.currentLogLevel = 4; // current log level is the level we check against to decide whether to show the message
-		this.defaultLogLevel = 2; // default log level is the level we push to log at when a level isn't passed to log/push
+		this.#currentLogLevel = 4; // current log level is the level we check against to decide whether to show the message
+		this.#defaultLogLevel = 2; // default log level is the level we push to log at when a level isn't passed to log/push
 	}
 
-	setCurrentLogLevel(level) { this.currentLogLevel = level; }
-	setDefaultLogLevel(level) { this.defaultLogLevel = level; }
+	setCurrentLogLevel(level) { this.#currentLogLevel = level; }
+	setDefaultLogLevel(level) { this.#defaultLogLevel = level; }
 
 	get count() {
 		return this.logs.length;
@@ -41,18 +46,18 @@ class logger {
 	}
 
 	writeToFile(message) {
-		fs.appendFileSync(this.parent.logFile, message + '\n');
+		fs.appendFileSync(this.#parent.logFile, message + '\n');
 	}
 
 	log() {
-        let messageLogLevel = this.defaultLogLevel;
+        let messageLogLevel = this.#defaultLogLevel;
         let message=``;
 
 		const timestamp = new Date().toISOString();
 
-		const hrDiff = process.hrtime.bigint(this.hrStart);
+		const hrDiff = process.hrtime.bigint(this.#hrStart);
 
-		let num = Number(hrDiff - this.hrStart);
+		let num = Number(hrDiff - this.#hrStart);
 		let seconds = num / 1000000000;
 
 		const profileTime = `${seconds.toFixed(4)}s`;
@@ -65,7 +70,7 @@ class logger {
 		}
 
         for (;i<arguments.length;i++)
-        	if (messageLogLevel <= this.currentLogLevel) {
+        	if (messageLogLevel <= this.#currentLogLevel) {
         		message+=arguments[i];
         	}
 
