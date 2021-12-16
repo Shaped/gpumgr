@@ -30,8 +30,6 @@ global.$version = `0.0.8-alpha`;
 global.$copyright = `(C) 2022 Jai B. (Shaped Technologies)`;
 global.$license = `GPLv3 License`;
 
-const webHandlerClass = require('./webHandler.js');
-
 class gpuManager {
 	constructor() {
 		this.logFile = `${$me}.log`;
@@ -236,10 +234,12 @@ class gpuManager {
 	}
 
 	async startDaemon(restart = false) {
+		const webHandlerClass = require('./webHandler.js');
+
 		this.webHandler = new webHandlerClass({
 			_parent:this,
 			host:'0.0.0.0'/*::DEVELOPMENT::Don't release with 0.0.0.0*/
-		});//*::TODO:take cmd line port and host and threads and stuff it here 
+		});//*::TODO::take cmd line port and host and threads and stuff it here 
 
 		try {
 			this.webHandler.startListening();

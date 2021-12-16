@@ -6,18 +6,13 @@
 	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
 
-const cores = require('os').cpus().length;
 const http = require('http');
 const express = require('express');
-
 const sass = require('sass');
-
-//const libxslt = require('libxslt'); // third times a charm? saxon - wants you to do cli shit, i can work around but not stuff params and never got an actual rendered result
-									// xslt-processor? quick/easy to get running but again, can't stuff params
-									// libxslt? 
-
 const saxon = require('saxon-js');
 const x2j = require('xml2json');
+
+const cores = require('os').cpus().length;
 
 class webHandler {
 	constructor({
@@ -61,9 +56,10 @@ class webHandler {
 
 				app.use(express.static('../assets/pub/www'));
 
-				app.use('/css/*', this.handleScssRequest.bind(this));
+				app.use('/js/*', this.handleJSRequest.bind(this));
+				app.use('/css/*', this.handleCSSRequest.bind(this));
 				app.use('/img', express.static('../assets/pub/img'));
-				app.use('/js', express.static('../assets/pub/js'));
+				//app.use('/js', express.static('../assets/pub/js'));
 
 				app.use(this.handleRequest.bind(this));
 				app.use('/', this.route_index.bind(this));
@@ -81,53 +77,161 @@ class webHandler {
 		})
 	}
 
-	compileSCSS(scssfile, cssfile) {
-		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Cache Miss | Compiling ${scssfile}`);
+	compileSCSS(cssfile) {
+		let scssfile = cssfile.replace('.css','.scss');
+		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Cache Miss | Compiling styles/scss/${scssfile} > cache/css/${cssfile}`);
+
 		let rendered = sass.renderSync({ file: `../assets/styles/scss/${scssfile}` }).css;
-		fs.writeFileSync(`../assets/pub/css/${cssfile}`, rendered, 'utf8');
+
+		let path = cssfile.split('/');
+		let reconstructedPath = '';
+
+		for (let i=0;i<path.length-1;i++) {
+			if (i!=path.length-1) {
+				reconstructedPath += path[i]+"/";
+				try {
+					fs.statSync(`../assets/cache/css/${reconstructedPath}`);
+				} catch(e) {
+					if (e.code == "ENOENT") {
+						logger.log(`Path ${reconstructedPath} not found in cache/css/ - creating!`);
+						fs.mkdirSync(`../assets/cache/css/${reconstructedPath}`);
+					} else {
+						logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
+						throw new Error(e);
+					}
+				}
+			} else {
+				reconstructedPath += path[i];
+			}
+		}
+
+		fs.writeFileSync(`../assets/cache/css/${cssfile}`, rendered, 'utf8');
 		return rendered;
 	}
 
-	handleScssRequest(req, res, next) {
-		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Request received for ${req.params[0]}`);
-
-		let result=null;
-
+	handleCSSRequest(req, res, next) {
 		try {
-			res.type(`text/css`);
+			logger.log(LOG_LEVEL_DEVELOPMENT, `CSS Request received for ${req.params[0]}`);
+
 			let scssfile = req.params[0].replace('.css','.scss');
+			let result = null;
 
 			try {
-				var css_stat = fs.statSync(`../assets/pub/css/${req.params[0]}`);
-			} catch (e) {
-				if (e.code == "ENOENT") { // css file doesn't exist, we need to render
-					result = this.compileSCSS(scssfile, req.params[0]);
-				} else {
-					throw new Error(`Unknown Error trying to read ${req.params[0]}: ${e}`);
-				}
-			}
-
-			try {
-				var scss_stat = fs.statSync(`../assets/styles/scss/${scssfile}`);
-			} catch (e) {
-				if (e.code == "ENOENT") { // scss file doesn't exist?? we can try and push regualr css if it exists, 
-					if (typeof css_stat !== 'undefined') {
-						logger.log(LOG_LEVEL_PRODUCTION, `SCSS doesn't exist, trying to fall back on to static ${req.params[0]}`);
-						result = fs.readFileSync(`../assets/pub/css/${req.params[0]}`);
-					} else {
-						throw new Error(`404 - ${req.params[0]}`);
-					}
-				} else {
-					throw new Error(`Unknown Error trying to read ${req.params[0]}: ${e}`);
-				}
-			}
-
-			if (result == null && scss_stat.mtimeMs > css_stat.mtimeMs) {
-				result = this.compileSCSS(scssfile, req.params[0]);
-			} else {
 				result = fs.readFileSync(`../assets/pub/css/${req.params[0]}`);
+			} catch (e) {
+				logger.log(LOG_LEVEL_DEVELOPMENT, `Static CSS Miss | Searching Cache for ${req.params[0]}`);
+
+				// static css file doesn't exist, we need to look to scss cache or render
+				if (e.code != "ENOENT") throw new Error(`Unknown Error trying to read pub/css/${req.params[0]}: ${e}`);
 			}
 
+			if (result == null) {
+				try {
+					var cache_stat = fs.statSync(`../assets/cache/css/${req.params[0]}`);
+				} catch (e) {
+					if (result == null && e.code == "ENOENT") {// css cached file doesn't exist, we need to render
+						result = this.compileSCSS(req.params[0]);
+					} else if (result == null) throw new Error(`Unknown Error trying to read cache/css/${req.params[0]}: ${e}`);					
+				}
+
+				try {
+					var scss_stat = fs.statSync(`../assets/styles/scss/${scssfile}`);
+				} catch (e) {
+					if (e.code == "ENOENT") { // scss file doesn't exist?? we can try and push cached css if it exists, 
+						if (typeof cache_stat !== 'undefined') {
+							logger.log(LOG_LEVEL_PRODUCTION, `Warning: SCSS (styles/scss/${scssfile}) doesn't exist! Trying to fall back on cache (cache/css/${req.params[0]})`);
+							result = fs.readFileSync(`../assets/cache/css/${req.params[0]}`);
+						} else throw new Error(`404 - ${req.params[0]}`);
+					} else throw new Error(`Unknown Error trying to read styles/scss/${req.params[0]}: ${e}`);
+				}
+	
+				if (scss_stat.mtimeMs > cache_stat.mtimeMs) result = this.compileSCSS(req.params[0]);
+				else result = fs.readFileSync(`../assets/cache/css/${req.params[0]}`);
+			}
+
+			res.type(`text/css`);
+			res.send( result );
+		} catch (e) {
+			logger.log(util.inspect(e));
+			res.type('text/html').status(404).send('404 Error');
+		}
+	}
+
+	compileJSX(jsxfile) {
+		let jsfile = jsxfile.replace('.jsx','.js');
+		logger.log(LOG_LEVEL_DEVELOPMENT,`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
+
+		//*::TODO::babble the babel babble
+		let rendered = 'compiled';
+
+		let path = jsfile.split('/');
+		let reconstructedPath = '';
+
+		for (let i=0;i<path.length-1;i++) {
+			if (i!=path.length-1) {
+				reconstructedPath += path[i]+"/";
+				try {
+					fs.statSync(`../assets/cache/js/${reconstructedPath}`);
+				} catch(e) {
+					if (e.code == "ENOENT") {
+						logger.log(`Path ${reconstructedPath} not found in cache/js/ - creating!`);
+						fs.mkdirSync(`../assets/cache/js/${reconstructedPath}`);
+					} else {
+						logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
+						throw new Error(e);
+					}
+				}
+			} else {
+				reconstructedPath += path[i];
+			}
+		}
+
+		//fs.writeFileSync(`../assets/cache/js/${jsfile}`, rendered, 'utf8');
+
+		return rendered;
+	}
+
+	handleJSRequest(req, res, next) {
+		try {
+			logger.log(LOG_LEVEL_DEVELOPMENT, `JS Request received for ${req.params[0]}`);
+
+			let result = null;
+
+			if (req.params[0].substr(-4,4) == ".jsx") {
+				try {
+					let jsfile = req.params[0].replace('.jsx','.js');
+					var cache_stat = fs.statSync(`../assets/cache/js/${jsfile}`);
+				} catch (e) {
+					if (result == null && e.code == "ENOENT") {// js cached file doesn't exist, we need to render
+						result = this.compileJSX(req.params[0]);
+					} else if (result == null) throw new Error(`Unknown Error trying to read cache/js/${jsfile}: ${e}`);					
+				}
+
+				if (result == null) {
+					try {
+						var jsx_stat = fs.statSync(`../assets/scripts/jsx/${req.params[0]}`);
+						logger.log(util.inspect(jsx_stat));
+					} catch (e) {
+						if (e.code == "ENOENT") { // JSX file doesn't exist?? we can try and push cached js if it exists, 
+							if (typeof cache_stat !== 'undefined') {
+								logger.log(LOG_LEVEL_PRODUCTION, `Warning: SCSS (scripts/jsx/${req.params[0]}) doesn't exist! Trying to fall back on cache (cache/js/${req.params[0]})`);
+								result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
+							} else throw new Error(`404 - ${req.params[0]}`);
+						} else throw new Error(`Unknown Error trying to read styles/jsx/${req.params[0]}: ${e}`);
+					}
+		
+					if (jsx_stat.mtimeMs > cache_stat.mtimeMs) result = this.compileJSX(req.params[0]);
+					else result = fs.readFileSync(`../assets/cache/js/${req.params[0]}`);
+				}
+			} else {
+				try {
+					result = fs.readFileSync(`../assets/pub/js/${req.params[0]}`);
+				} catch (e) {
+					throw new Error(`404 - pub/js/${req.params[0]}: ${e}`);
+				}				
+			}
+
+			res.type(`text/css`);
 			res.send( result );
 		} catch (e) {
 			logger.log(util.inspect(e));
@@ -145,6 +249,7 @@ class webHandler {
 
 		switch (params[1]) {
 			case 'js':
+			case 'jsx':
 			case 'css':
 			case 'img':
 				this.doHTTPError(res, 404, "Resource not found");

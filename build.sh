@@ -27,8 +27,28 @@ else
 			echo "- commit changes"
 			echo "- update changelog"
 			echo
-			echo "build.sh will update the version numbers in source and README.md to v$2!"
-			echo
+			sleep 0.333
+
+			branchcheck=$(git rev-parse --abbrev-ref HEAD)
+			if [ branchcheck != 'main' ]; then
+				echo "WARNING: Not on main branch!"
+				echo "Currently on branch: "$branchcheck
+				echo
+				sleep 1
+				read -r -p "Are you sure you want to continue building on branch '"$branchcheck"'? [y/N] " response
+				case "$response" in
+					[yY][eE][sS]|[yY])
+						echo "Continuing build, even though we are on branch: $branchcheck"
+						echo
+						sleep 0.5
+					;;
+					*)
+						echo "Aborting build due to wrong branch: $branchcheck"
+						echo
+						exit 1
+					;;
+				esac
+			fi
 
 			todocheck=$(grep -E \/\\*::TODO -o src/*.js | wc -l)
 
@@ -36,6 +56,11 @@ else
 				echo "WARNING: Found ::TODO tags in source."
 				echo "Make sure you've double checked any *::TODO tags!!"
 				echo
+				echo "List of found *::TODO tags"
+				echo
+				grep -n -E \/\\*::TODO src/*.js
+				echo
+				sleep 0.25
 			fi
 
 			devcheck=$(grep -E \/\\*::DEVELOPMENT -o src/*.js | wc -l)
@@ -44,10 +69,21 @@ else
 				echo "ERROR: UNABLE TO BUILD!! FAILED DEV TAG CHECK."
 				echo "Make sure you've checked and removed any *::DEVELOPMENT tags!!"
 				echo
-				exit
+				echo "List of found *::DEVELOPMENT tags"
+				echo
+				grep -n -E \/\\*::DEVELOPMENT src/*.js
+				echo
+				echo "EXITING due to *::DEVELOPMENT tags error!"
+				echo
+				exit 1
 			fi
 
-			read -r -p "Are you sure you want to continue? [y/N] " response
+			sleep 0.25
+			echo "WARNING: build.sh will update the version numbers in source and README.md to v$2!"
+			echo "Please verify that 'v$2' is a valid version number!"
+			echo
+			echo
+			read -r -p "Are you sure you want to begin the build? [y/N] " response
 			case "$response" in
 				[yY][eE][sS]|[yY])
 					echo
@@ -109,7 +145,7 @@ else
 
 					echo
 					echo "Creating GitHub README.md with changes/todo appended in project root"
-					#TODO: Automatically add usage to docs/README.md somehow
+					#TODO: Automatically add usage to docs/README.md somehow ??
 					cat docs/README.md > README.md
 					cat docs/CHANGELOG.md >> ./README.md
 					cat docs/TODO.md >> ./README.md
