@@ -14,6 +14,9 @@
 <xsl:param name="metaDescription" as="array(*)"/>
 <xsl:param name="revisitAfter" as="array(*)"/>
 <xsl:param name="currentYear" as="array(*)"/>
+<xsl:param name="serviceHost" as="array(*)"/>
+<xsl:param name="servicePort" as="array(*)"/>
+
 <xsl:template 
 	name="default"
 	match="/">
@@ -51,7 +54,7 @@
 		</div>
 	</div>
 	<div class="right">
-		
+		<p alt="This should be 127.0.0.1 unless you need to access gpumgr from a remote system!">Listening on http://<xsl:value-of select="$serviceHost" />:<xsl:value-of select="$servicePort" /></p>
 	</div>
 </header>
 <main>

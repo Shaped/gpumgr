@@ -33,10 +33,9 @@ class webHandler {
 		this.port = port;
 
 		this.threads = (threads == -1)
-						? (cores < 4)
-							? cores
-							: 4
-						: threads;
+						? (cores < 2)
+						 ? cores : 2
+						 : threads;
 
 		this.workers = [];
 	}
@@ -237,7 +236,9 @@ class webHandler {
 						      "pageTitle": [["gpumgr"]],
 						      "metaDescription": [["gpumgr is a Linux GPU manager with CLI and web interfaces."]],
 						      "revisitAfter": [["3 days"]],
-						      "currentYear": [[new Date().getFullYear()]]
+						      "currentYear": [[new Date().getFullYear()]],
+						      "serviceHost": [[this.host]],
+						      "servicePort": [[this.port]]
 						   }
 				});
 

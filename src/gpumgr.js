@@ -1353,8 +1353,8 @@ Usage:
                    			(eg. 1969, default is 4242)
       --host <ip>    			Set which ipv4 host to listen on.
                    			(eg. 0.0.0.0 or 127.0.0.1)
-      --threads <#>    			Number of threads for local service
-                   			(defaults to number of cores, upto 4)
+      --threads <#>    			Number of worker threads per local service
+                   			(defaults to number of cores, upto 2)
 Examples:
 
   ${$me} show nvidia               	Show status of all Nvidia GPUs
