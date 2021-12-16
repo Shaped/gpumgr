@@ -1,6 +1,5 @@
 .tarignore
 bin/*
-assets/cache/*
 src/*.log
 node_modules
 docs/README.md
