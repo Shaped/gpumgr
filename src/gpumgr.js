@@ -18,6 +18,7 @@ global.util = require('util');
 global.child = require('child_process');
 global.path = require('path');
 global.cores = require('os').cpus().length;
+global.net = require('net');
 
 global.exec = util.promisify(require('child_process').exec);
 
@@ -39,6 +40,8 @@ class gpuManager {
 		this.servicePort = 1969;
 		this.serviceThreads = -1;
 
+		this.fd7=null;
+
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
@@ -46,6 +49,7 @@ class gpuManager {
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
+		process.on('SIGUSR1', this.handleSignal.bind(this));
 		process.on('SIGUSR2', this.handleSignal.bind(this));
 		process.on('uncaughtException', this.uncaughtExceptionHandler.bind(this));
 		process.on('unhandledRejection', this.unhandledRejectionHandler.bind(this));
@@ -77,7 +81,7 @@ class gpuManager {
 
 		(process.argv[2] == '__child')
 		? (cluster.isMaster)
-			? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
+			? ( logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`) )
 			: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
 		(process.argv[process.argv.length-1] == '-g' ||  process.argv[process.argv.length-1] == '--no-colors')
@@ -108,11 +112,21 @@ class gpuManager {
 				switch (process.argv[3]) {
 					case 'restart':
 						try {//*::TODO:: Figure out a way to save options (host/port/threads) on a force restart? or at very least (or both) allow to set options on force restart.
+							//*::TODO:: almost done, took all fucking night. stupid undocumented shit.
 							let pid = await this.getChildPID();
+							await logger.log(`${$me} attempting to query child [${pid}]`);
+							try {
+								await this.queryOOB(pid);
+							} catch (e) {
+								await logger.log(`${$me} pingback failed, process will be killed. start it again manually. [${pid}]`);
+								await this.killPID(pid);
+								await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+								process.exit();
+							}
 							await logger.log(`${$me} attempting to stop daemon [${pid}]`);
 							await this.killPID(pid);
 							await logger.log(`${$me} attempting to start new daemon...`);
-							await this.forkOff();
+							await this.forkOff(true);
 							await logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
 						} catch (e) {
 							await logger.log(`${$me} unable to find daemon`);
@@ -126,7 +140,7 @@ class gpuManager {
 							await logger.log(`${$me} attempting to kill daemon [${pid}]`);
 							process.kill(pid, "SIGTERM");
 							await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
-							process.exit();							
+							process.exit();
 						} catch (e) {
 							await logger.log(`${$me} unable to find daemon`);
 						}
@@ -221,6 +235,7 @@ class gpuManager {
 		switch (signal) {
 			case 'SIGINT':
 				logger.log("Caught SIGINT - cleaning up and exiting..");
+				if (this.fd7 != null) logger.log(util.inspect(this.fd7))
 				await this.stopDaemon();
 				process.exit();
 			  break;
@@ -228,8 +243,15 @@ class gpuManager {
 				logger.log("Caught SIGTERM - cleaning up and exiting..");
 				await this.stopDaemon();
 				process.exit();
+			  break;
+			case 'SIGUSR1':
+				logger.log("Caught SIGUSR1 - opening oobipc..");
+				let pipe = new net.Socket({fd:7});
+				pipe.on('data',this.handleOOB.bind(this));
+			  break;
 			case 'SIGUSR2':
 				logger.log("Caught SIGUSR2 - soft-restarting..");
+				if (this.fd7 != null) logger.log(util.inspect(this.fd7))
 				await this.stopDaemon();
 				logger.log("Stopped..");
 				await this.startDaemon(true);
@@ -242,10 +264,9 @@ class gpuManager {
 		const webHandlerClass = require('./webHandler.js');
 
 		switch(process.argv[3]) {
-			case 'force':
-			  break;
 			case 'restart':
 			  break;
+			case 'force':
 			case 'start':
 				let [_1,_2,_3,_4,...args] = process.argv;
 				for (let i=0;i<args.length;i++) {
@@ -281,6 +302,8 @@ class gpuManager {
 								&& parseInt(args[i+1]) <= (cores*2) ) {
 								let threads = args.splice(i+1,1)[0];
 								this.serviceThreads = threads;
+							} else if (args[i+1] == '-1') {
+								this.serviceThreads = -1;
 							} else {
 								logger.log(`Invalid argument for --threads, '${args[i+1]}', threads must be a number between 1 and ${cores*2} (# of logical CPU cores * 2)`);
 								process.exit(1);								
@@ -306,14 +329,26 @@ class gpuManager {
 		this.webHandler = new webHandlerClass(options);
 
 		try {
+			process.argv = process.argv.filter((el)=>{if (el != '7>&1') return el})
 			this.webHandler.startListening();
 
-/*			if (cluster.isMaster) { // cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
-				this.daemonInterval = setInterval(async()=>{
+			if (cluster.isMaster) { // cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
+				//this.fd7 = fs.createReadStream(null, {fd:5}).on('data',this.handleOOB.bind(this));
+				// so if I listen on the oob, I clear the buffer so I can't preload it with values
+				// and if it's not preloaded and i stall, force restart won't get a pingback and kill
+				// but if i preload it, then force restart will get it's pingback immediately as it's already
+				// there but then I can't do oobipc for anything else on this channel...
+				// work around, initially preload the values, don't listen
+				// if we get sigusr1, we will listen and load the values.
+				// that way, they should be there already. if not, wtf, we can try and ask
+				// if we're dead, then we're dead and we die, if not we can reply and get restarted
+				//console.log(util.inspect(this.fd7));
+				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);				
+			/*	this.daemonInterval = setInterval(async()=>{
 					await logger.log(`Daemon Child Reporting`);
 					this.enumerateGPUs();
-				},5000);
-			}*/
+				},5000);*/
+			}
 		} catch(e) {
 			logger.log(`Unable to listen: ${e}`)
 		}
@@ -327,16 +362,64 @@ class gpuManager {
 		await logger.log(`${$me} ${$version} daemon shutting down.`);
 	}
 
-	async forkOff(restart = false) {
+	queryOOB(pid) {
+		return new Promise((resolve,reject) => {
+			logger.log(`${$me} [${process.pid}] creating readstream for /proc/${pid}/fd/7`)
+			let oob = fs.createReadStream(`/proc/${pid}/fd/7`);
+			logger.log(`created, settign event handler`)
+			let resolved = false;
+
+			oob.on('data', (chunk) => {
+				logger.log(`${$me} received pingback from client ${pid} on oobipc`);
+				let [_,host,port,threads] = chunk.toString().split(':');
+				this.serviceHost = host;
+				this.servicePort = port;
+				this.serviceThreads = threads;
+				resolved = true;
+				resolve();
+			});
+
+			logger.log(`${process.pid}: evh set`);
+
+			setTimeout(()=>{
+				if (resolved == false) {
+					logger.log(`${$me} didn't find a queued oobipc, will try to signal for one`);
+					process.kill(pid, 'SIGUSR1');
+					setTimeout(()=>{
+						fs.writeFileSync(`/proc/${pid}/fd/8`, `👌`);
+					},500);
+				}
+			},1000);
+
+			setTimeout(()=> {
+				reject(`Pingback Timeout!`);
+			},5000);
+		});
+	}
+
+	handleOOB(chunk) {
+		if (chunk.toString().substr(0,1) == "👌") {
+			logger.log(`${process.pid}: OOBIPC query received! Sending pingback.`);
+			setTimeout(()=>{
+				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);
+			},50);
+			logger.log(`${process.pid}: Sent pingback!`);
+		}
+	}
+
+	async forkOff(forceRestart = false) {
 		try {
 			fs.statSync(`/tmp/gpumgr.pid`)
 			logger.divertToFile();
 			logger.log(`PID file exists; daemon is likely already running.`)
 		} catch (e) {
 			let [_,__,...args] = process.argv;
-			(typeof this.childProcess === 'undefined') ?(
-				this.childProcess = child.fork(__filename, ['__child', ...args], {detached:true}),
-				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)):null;
+			(typeof this.childProcess === 'undefined')
+			?	((!forceRestart)
+				? this.childProcess = child.fork(__filename, ['__child', ...args, '7>&1'], { detached:true })
+				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
+				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`))
+			:null;
 //				logger.divertToFile();
 
 				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
