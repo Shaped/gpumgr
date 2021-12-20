@@ -45,7 +45,10 @@ class gpuManager {
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
-		/*::DEVELOPMENT*/logger.setCurrentLogLevel(64);
+		/*::DEVELOPMENT*/
+		this.developmentMode = true;
+
+		if (this?.developmentMode) logger.setCurrentLogLevel(64);
 
 		process.on('SIGINT', this.handleSignal.bind(this));
 		process.on('SIGTERM', this.handleSignal.bind(this));
@@ -330,6 +333,10 @@ class gpuManager {
 
 		try {
 			process.argv = process.argv.filter((el)=>{if (el != '7>&1') return el})
+			//*::TODO::Should we perhaps look for GPUs here and not start listening if we don't find any?
+			//*::TODO::I mean, if we don't find any, drivers are bad or there isn't any, user should
+			//*::TODO::have to reboot or reinstall drivers before it would work anyway..? Then we
+			//*::TODO::don't have to template for no/zero GPUs..?
 			this.webHandler.startListening();
 
 			if (cluster.isMaster) { // cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
@@ -366,7 +373,6 @@ class gpuManager {
 		return new Promise((resolve,reject) => {
 			logger.log(`${$me} [${process.pid}] creating readstream for /proc/${pid}/fd/7`)
 			let oob = fs.createReadStream(`/proc/${pid}/fd/7`);
-			logger.log(`created, settign event handler`)
 			let resolved = false;
 
 			oob.on('data', (chunk) => {
@@ -378,8 +384,6 @@ class gpuManager {
 				resolved = true;
 				resolve();
 			});
-
-			logger.log(`${process.pid}: evh set`);
 
 			setTimeout(()=>{
 				if (resolved == false) {
@@ -426,7 +430,7 @@ class gpuManager {
 		}
 	}
 
-	// no async code here! not even with await, it can loop-back!
+	// no async code here! not even with await, it will loop-back!
 	nothingLeftToDo(code) { logger.log(`${$me} daemon shutting down..`); }
 
 	handleChildExit(code) {

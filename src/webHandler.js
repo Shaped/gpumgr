@@ -6,11 +6,13 @@
 	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
 
+//*::TODO::maybe try and move these to only load when actually needed
 const http = require('http');
 const express = require('express');
 const sass = require('sass');
-const saxon = require('saxon-js');
 const x2j = require('xml2json');
+const saxon = require('saxon-js');
+const babel = require('@babel/core');
 
 class webHandler {
 	constructor({
@@ -57,7 +59,6 @@ class webHandler {
 				app.use('/js/*', this.handleJSRequest.bind(this));
 				app.use('/css/*', this.handleCSSRequest.bind(this));
 				app.use('/img', express.static('../assets/pub/img'));
-				//app.use('/js', express.static('../assets/pub/js'));
 
 				app.use(this.handleRequest.bind(this));
 				app.use('/', this.route_index.bind(this));
@@ -117,7 +118,7 @@ class webHandler {
 			try {
 				result = fs.readFileSync(`../assets/pub/css/${req.params[0]}`);
 			} catch (e) {
-				logger.log(LOG_LEVEL_DEVELOPMENT, `Static CSS Miss | Searching Cache for ${req.params[0]}`);
+				logger.log(LOG_LEVEL_DEVELOPMENT, `CSS not found in static | Searching Cache for ${req.params[0]}`);
 
 				// static css file doesn't exist, we need to look to scss cache or render
 				if (e.code != "ENOENT") throw new Error(`Unknown Error trying to read pub/css/${req.params[0]}: ${e}`);
@@ -126,6 +127,7 @@ class webHandler {
 			if (result == null) {
 				try {
 					var cache_stat = fs.statSync(`../assets/cache/css/${req.params[0]}`);
+					logger.log(LOG_LEVEL_DEVELOPMENT, `CSS Cache Hit for ${req.params[0]}`);
 				} catch (e) {
 					try {
 						if (result == null && e.code == "ENOENT") {// css cached file doesn't exist, we need to render
@@ -165,32 +167,68 @@ class webHandler {
 		let jsfile = jsxfile.replace('.jsx','.js');
 		logger.log(LOG_LEVEL_DEVELOPMENT,`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
 
-		//*::TODO::babble the babel babble
-		let rendered = 'compiled';
+		let rendered = null;
 
-		let path = jsfile.split('/');
-		let reconstructedPath = '';
+		//*::TODO::more babbling about babel babble: source maps wouldmight be nice.
+		//*::TODO::would caching asts be useful at all? methinks only with multifilecomplie
+		//*::TODO::should add an optional way of shoving regular jsx through babel w/some options or something?
+		let parserOpts = {
+			//errorRecovery: true, 	// don't throw immediately on errors, try to continue
+			attachComment: ((this.parent.developmentMode)?false:true), 	// remove comments before ast
+			strictMode: true 			// always use strict mode
+		};
 
-		for (let i=0;i<path.length-1;i++) {
-			if (i!=path.length-1) {
-				reconstructedPath += path[i]+"/";
-				try {
-					fs.statSync(`../assets/cache/js/${reconstructedPath}`);
-				} catch(e) {
-					if (e.code == "ENOENT") {
-						logger.log(`Path ${reconstructedPath} not found in cache/js/ - creating!`);
-						fs.mkdirSync(`../assets/cache/js/${reconstructedPath}`);
-					} else {
-						logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
-						throw new Error(e);
+		let generatorOpts = {
+			compact : (!this.parent.developmentMode), // whether to remove newlines/whitespace, 'auto' compacts if code.len>500k
+			minified: (!this.parent.developmentMode), // whether to minify the output
+			comment : (this.parent.developmentMode), // default for below
+			//shouldPrintComment: (comment)=>{}, // function for deciding whether to print comment..?
+		};
+
+		try {
+			let parsed = babel.transformFileSync(`../assets/scripts/jsx/${jsxfile}`, {
+				targets: `defaults`,
+				sourceType: `unambiguous`,
+				sourceMaps: true,
+				sourceFileName: jsxfile,
+				sourceRoot: `/js/maps/`,
+				highlightCode: true,
+				presets: [[`@babel/preset-react`, {
+					throwIfNamespace: true 
+				}]],
+				parserOpts,
+				generatorOpts
+			});
+
+			let path = jsfile.split('/');
+			let reconstructedPath = '';
+
+			for (let i=0;i<path.length-1;i++) {
+				if (i!=path.length-1) {
+					reconstructedPath += path[i]+"/";
+					try {
+						fs.statSync(`../assets/cache/js/${reconstructedPath}`);
+					} catch(e) {
+						if (e.code == "ENOENT") {
+							logger.log(`Path ${reconstructedPath} not found in cache/js/ - creating!`);
+							fs.mkdirSync(`../assets/cache/js/${reconstructedPath}`);
+						} else {
+							logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
+							throw new Error(e);
+						}
 					}
+				} else {
+					reconstructedPath += path[i];
 				}
-			} else {
-				reconstructedPath += path[i];
 			}
-		}
 
-		//fs.writeFileSync(`../assets/cache/js/${jsfile}`, rendered, 'utf8');
+			rendered = parsed.code;
+
+			fs.writeFileSync(`../assets/cache/js/${jsfile}`, rendered, 'utf8');
+		} catch (e) {
+			logger.log(util.inspect(e)); // log then
+			throw new Error(e); // up the chain, so we get 404/500
+		}
 
 		return rendered;
 	}
@@ -199,11 +237,11 @@ class webHandler {
 		try {
 			logger.log(LOG_LEVEL_DEVELOPMENT, `JS Request received for ${req.params[0]}`);
 
+			let jsfile = req.params[0].replace('.jsx','.js');
 			let result = null;
 
 			if (req.params[0].substr(-4,4) == ".jsx") {
 				try {
-					let jsfile = req.params[0].replace('.jsx','.js');
 					var cache_stat = fs.statSync(`../assets/cache/js/${jsfile}`);
 				} catch (e) {
 					if (result == null && e.code == "ENOENT") {// js cached file doesn't exist, we need to render
@@ -214,7 +252,6 @@ class webHandler {
 				if (result == null) {
 					try {
 						var jsx_stat = fs.statSync(`../assets/scripts/jsx/${req.params[0]}`);
-						logger.log(util.inspect(jsx_stat));
 					} catch (e) {
 						if (e.code == "ENOENT") { // JSX file doesn't exist?? we can try and push cached js if it exists, 
 							if (typeof cache_stat !== 'undefined') {
@@ -224,19 +261,24 @@ class webHandler {
 						} else throw new Error(`Unknown Error trying to read styles/jsx/${req.params[0]}: ${e}`);
 					}
 		
-					if (jsx_stat.mtimeMs > cache_stat.mtimeMs) result = this.compileJSX(req.params[0]);
-					else result = fs.readFileSync(`../assets/cache/js/${req.params[0]}`);
+					if (jsx_stat.mtimeMs > cache_stat.mtimeMs) {
+						result = this.compileJSX(req.params[0]);
+					} else {
+						logger.log(LOG_LEVEL_DEVELOPMENT, `JSX Cache Hit for ${req.params[0]}`);
+						result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
+					}
 				}
 			} else {
 				try {
 					result = fs.readFileSync(`../assets/pub/js/${req.params[0]}`);
+					logger.log(LOG_LEVEL_DEVELOPMENT, `Static JS file served for ${req.params[0]}`);
 				} catch (e) {
 					throw new Error(`404 - pub/js/${req.params[0]}: ${e}`);
 				}				
 			}
 
-			res.type(`text/css`);
-			res.send( result );
+			res.type(`text/javascript`);
+			res.send(`${result}`);
 		} catch (e) {
 			logger.log(util.inspect(e));
 			res.type('text/html').status(404).send('404 Error');
@@ -332,7 +374,7 @@ class webHandler {
 				logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache miss, must compile ${template}`);
 				sef = this.compileXSLT(template);
 			} else {
-				logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache hit ${sefFile}`);
+				logger.log(LOG_LEVEL_DEVELOPMENT, `sef cache hit for ${sefFile}`);
 				sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
 			}
 
@@ -347,7 +389,8 @@ class webHandler {
 						      "revisitAfter": [["3 days"]],
 						      "currentYear": [[new Date().getFullYear()]],
 						      "serviceHost": [[this.host]],
-						      "servicePort": [[this.port]]
+						      "servicePort": [[this.port]],
+						      "data" : [[JSON.stringify(this.parent.GPUs)]]
 						   }
 				});
 

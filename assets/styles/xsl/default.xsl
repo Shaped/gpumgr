@@ -9,13 +9,14 @@
 	indent="yes"
 	encoding="utf-8"
 />
-<!-- Bindings; Requried for freeform-js (because saxon), not required for freeform-php (because not saxon) -->
+<!-- Bindings; Requried for freeform-js (because saxon, stupid, wtf, can we fix? maybe even just stuff these in manually? like ef, we can't even use any other binding types it seems), not required for freeform-php (because not saxon) -->
 <xsl:param name="pageTitle" as="array(*)"/>
 <xsl:param name="metaDescription" as="array(*)"/>
 <xsl:param name="revisitAfter" as="array(*)"/>
 <xsl:param name="currentYear" as="array(*)"/>
 <xsl:param name="serviceHost" as="array(*)"/>
 <xsl:param name="servicePort" as="array(*)"/>
+<xsl:param name="data" as="array(*)"/>
 
 <xsl:template 
 	name="default"
@@ -41,6 +42,16 @@
 	<meta name="description" content="{$metaDescription}" />
 	<meta name="revisit-after" content="{$revisitAfter}" />
 
+	<!--*::DEVELOPMENT::* -->
+	<script type="text/javascript" src="js/react/react.development.js"></script>
+	<script type="text/javascript" src="js/react/react-dom.development.js"></script>
+
+	<!--*::PRODUCTION::* 
+	<script type="text/javascript" src="js/react/react.production.min.js"></script>
+	<script type="text/javascript" src="js/react/react-dom.production.min.js"></script> -->
+
+	<script type="text/javascript" src="js/GPUTable.jsx"></script>
+	<script type="text/javascript">var _data = `<xsl:value-of select="$data" />`;</script>
 	<script type="text/javascript" src="js/app.js"></script>
 </head>
 
@@ -59,7 +70,7 @@
 </header>
 <main>
 	<div class="cardWrapper">
-		<div class="card wide">
+		<div class="card wide" id="card-GPUTable">
 			<xsl:choose>
 				<xsl:when test="GPUs/*">
 					<h2>GPUs Found:</h2>
@@ -96,6 +107,7 @@
 			</xsl:choose>
 		</div>
 	</div>
+	<div id="reactRoot" />
 </main>
 <footer>
 	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr</a>&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>

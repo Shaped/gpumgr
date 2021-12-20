@@ -60,5 +60,11 @@
 		"defaults",
 		"not IE 11",
 		"maintained node versions"
-	]
+	],
+	"devDependencies": {
+		"@babel/core": "^7.16.5",
+		"@babel/parser": "^7.16.6",
+		"@babel/preset-env": "^7.16.5",
+		"@babel/preset-react": "^7.16.5"
+	}
 }

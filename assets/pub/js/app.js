@@ -1,9 +1,13 @@
+/* (C) 2022 Shaped Technologies | GPL v3 */
+
 class gpumgrUI {
-	constructor() {}
+	constructor() {
+		this.data = JSON.parse(_data);
+	}
 	initialize() {
-		console.log("app.js!");
-		let test = new testApp();
-		console.log(test.initialize());
+		let GPUTable = new GPUTableFactory(this);
+
+		ReactDOM.render(GPUTable.componentFactory(), document.getElementById('card-GPUTable'));
 	}
 }
 
