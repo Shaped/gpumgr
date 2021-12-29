@@ -43,7 +43,7 @@ You can call the script directly and the shebang will call NodeJS.
 If you don't have NodeJS, you can download the binary version which is simply this script pre-packed with *[pkg](https://github.com/vercel/pkg)* with the required NodeJS and dependencies to run.
 
 ```
-gpumgr v0.0.8-alpha
+gpumgr v0.0.8-development
 
 gpumgr shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
