@@ -8,6 +8,10 @@
 
 class webSocketHandler {
     constructor(_parent) {
+    	this.parent = _parent;
+    }
+    initialize() {
+
     }
 };
 

@@ -449,23 +449,13 @@ class gpuManager {
 			case 'manual':
 			case 'enable':
 				switch (gpu) {
-					case 'all':
-						for (gpu of this.GPUs) await this.setGPUFanMode(gpu.gpu, 'manual');
-					  break;
-					case 'nvidia':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'nvidia')
-								await this.setGPUFanMode(gpu.gpu, 'manual');
-					  break;
-					case 'amd':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'amd')
-								await this.setGPUFanMode(gpu.gpu, 'manual');
-					  break;
-					case 'intel':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'intel')
-								await this.setGPUFanMode(gpu.gpu, 'manual');
+					case 'all': case 'nvidia': case 'amd': case 'intel':
+						for (let cgpu of this.GPUs)
+							(gpu == 'all')
+							? await this.setGPUFanMode(cgpu.gpu, 'manual')
+							: (cgpu.vendorName == gpu)
+								? await this.setGPUFanMode(cgpu.gpu, 'manual')
+								: null;
 					  break;
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -476,24 +466,14 @@ class gpuManager {
 			case 'automatic':
 			case 'disable':
 				switch (gpu) {
-					case 'all':
-						for (gpu of this.GPUs) await this.setGPUFanMode(gpu.gpu, 'automatic');
-					  break;
-					case 'nvidia':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'nvidia')
-								await this.setGPUFanMode(gpu.gpu, 'automatic');
-					  break;
-					case 'amd':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'amd')
-								await this.setGPUFanMode(gpu.gpu, 'automatic');
-					  break;
-					case 'intel':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'intel')
-								await this.setGPUFanMode(gpu.gpu, 'automatic');
-					  break;
+					case 'all': case 'nvidia': case 'amd': case 'intel':
+							for (let cgpu of this.GPUs)
+								(gpu == 'all')
+								? await this.setGPUFanMode(cgpu.gpu, 'automatic')
+								: (cgpu.vendorName == gpu)
+									? await this.setGPUFanMode(cgpu.gpu, 'automatic')
+									: null;
+						  break;					
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
 						await this.setGPUFanMode(gpu, 'automatic');
@@ -506,24 +486,14 @@ class gpuManager {
 				let speed = process.argv[3];
 				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
 				switch (gpu) {
-					case 'all':
-						for (gpu of this.GPUs) await this.setGPUFanSpeed(gpu.gpu, speed);
-					  break;
-					case 'nvidia':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'nvidia')
-								await this.setGPUFanSpeed(gpu.gpu, speed);
-					  break;
-					case 'amd':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'amd')
-								await this.setGPUFanSpeed(gpu.gpu, speed);
-					  break;
-					case 'intel':
-						for (gpu of this.GPUs)
-							if (gpu.vendorName == 'intel')
-								await this.setGPUFanSpeed(gpu.gpu, speed);
-					  break;
+					case 'all': case 'nvidia': case 'amd': case 'intel':
+						for (let cgpu of this.GPUs)
+							(gpu == 'all')
+							? await this.setGPUFanSpeed(cgpu.gpu)
+							: (cgpu.vendorName == gpu)
+								? await this.setGPUFanSpeed(cgpu.gpu)
+								: null;
+					  break;					
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
 
@@ -537,28 +507,19 @@ class gpuManager {
 		let power = process.argv[3];
 
 		//we could potentially allow percentages if we calculate stuff
-		//ie 100% is max_power, 0% is min_power?
+		//ie 100% is max_power, 0% is min_power? but is 100% 'defaut' power or 'max'?
+		//something like afterburner shows 100% as default and max as like 115% or whatever, prob best
 		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
 		
 		if (power == "reset") {
 			switch (gpu) {
-				case 'all':
-					for (gpu of this.GPUs) await this.resetGPUPower(gpu.gpu);
-				  break;
-				case 'nvidia':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'nvidia')
-							await this.resetGPUPower(gpu.gpu);
-				  break;
-				case 'amd':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'amd')
-							await this.resetGPUPower(gpu.gpu);
-				  break;
-				case 'intel':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'intel')
-							await this.resetGPUPower(gpu.gpu);
+				case 'all': case 'nvidia': case 'amd': case 'intel':
+					for (let cgpu of this.GPUs)
+						(gpu == 'all')
+						? await this.resetGPUPower(cgpu.gpu)
+						: (cgpu.vendorName == gpu)
+							? await this.resetGPUPower(cgpu.gpu)
+							: null;
 				  break;
 				default:
 					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -573,23 +534,13 @@ class gpuManager {
 			}
 
 			switch (gpu) {
-				case 'all':
-					for (gpu of this.GPUs) await this.setGPUPower(gpu.gpu, power);
-				  break;
-				case 'nvidia':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'nvidia')
-							await this.setGPUPower(gpu.gpu, power);
-				  break;
-				case 'amd':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'amd')
-							await this.setGPUPower(gpu.gpu, power);
-				  break;
-				case 'intel':
-					for (gpu of this.GPUs)
-						if (gpu.vendorName == 'intel')
-							await this.setGPUPower(gpu.gpu, power);
+				case 'all': case 'nvidia': case 'amd': case 'intel':
+					for (let cgpu of this.GPUs)
+						(gpu == 'all')
+						? await this.setGPUPower(cgpu.gpu, power)
+						: (cgpu.vendorName == gpu)
+							? await this.setGPUPower(cgpu.gpu, power)
+							: null;
 				  break;
 				default:
 					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -601,20 +552,13 @@ class gpuManager {
 	async handleListGPUs() {
 		let gpu = process.argv[3];
 		switch (gpu) {
-			case 'all':
-				for (gpu of this.GPUs) await this.listGPU(gpu.gpu);
-			  break;
-			case 'nvidia':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'nvidia') await this.listGPU(gpu.gpu);
-			  break;
-			case 'amd':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'amd') await this.listGPU(gpu.gpu);
-			  break;
-			case 'intel':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'intel') await this.listGPU(gpu.gpu);
+			case 'all': case 'nvidia': case 'amd': case 'intel':
+				for (let cgpu of this.GPUs)
+					(gpu == 'all')
+					? await this.listGPU(cgpu.gpu)
+					: (cgpu.vendorName == gpu)
+						? await this.listGPU(cgpu.gpu)
+						: null;
 			  break;
 			default:
 				if (Number.isInteger(parseInt(process.argv[3]))) {
@@ -629,20 +573,13 @@ class gpuManager {
 	async handleShowStatus() {
 		let gpu = process.argv[3];
 		switch (gpu) {
-			case 'all':
-				for (gpu of this.GPUs) await this.showStatus(gpu.gpu);
-			  break;
-			case 'nvidia':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'nvidia') await this.showStatus(gpu.gpu);
-			  break;
-			case 'amd':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'amd') await this.showStatus(gpu.gpu);
-			  break;
-			case 'intel':
-				for (gpu of this.GPUs)
-					if (gpu.vendorName == 'intel') await this.showStatus(gpu.gpu);
+			case 'all': case 'nvidia': case 'amd': case 'intel':
+				for (let cgpu of this.GPUs)
+					(gpu == 'all')
+					? await this.showStatus(cgpu.gpu)
+					: (cgpu.vendorName == gpu)
+						? await this.showStatus(cgpu.gpu)
+						: null;
 			  break;
 			default:
 				gpu = (Number.isInteger(parseInt(gpu))) ? process.argv[3] : 0;
@@ -654,7 +591,6 @@ class gpuManager {
 						logger.log(`GPU${gpu} not found - defaulting to GPU0.`);
 						gpu = 0;
 					}
-
 				await this.showStatus(gpu);
 		}
 	}

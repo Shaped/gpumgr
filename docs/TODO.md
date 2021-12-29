@@ -14,10 +14,12 @@
         	- subdomain has to resolve locally - requires net or entry in hosts
         	- worse, we have to distribute the private key which opens up other attacks
         - or, don't use a local cert and don't have any remote https resources?
-  - jsx compilation & caching
-    - get babel working for react/jsx
-    - js variable replacing/ejs templates?
+  - JS compilation stuff
+    - js variable replacing maybe? or ejs templates?
+    - react/jsx is good.
   - ** cache google fonts; we can't load them remotely over https without a cert/being on https ourselves
+    - easy way is to just wget and statically link
+    - might be nice to have something that can pull them from a file but eh
 - add ability to change clocks and other features
   - is there *any* way to change NVIDIA clocks without X?
   - I haven't seen anything really, although the amdpwrman reddit thread had some links to other programs doing good things

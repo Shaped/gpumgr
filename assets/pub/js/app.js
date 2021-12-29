@@ -4,6 +4,7 @@ class gpumgrUI {
 	constructor() {
 		this.data = JSON.parse(_data);
 	}
+	
 	initialize() {
 		let GPUTable = new GPUTableFactory(this);
 
@@ -13,6 +14,4 @@ class gpumgrUI {
 
 let gpumgr = new gpumgrUI();
 
-window.addEventListener(`load`, (ev) => {
-	gpumgr.initialize();
-});
+window.addEventListener(`load`, (ev) => { gpumgr.initialize(); });
