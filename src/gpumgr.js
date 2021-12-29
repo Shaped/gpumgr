@@ -69,8 +69,10 @@ class gpuManager {
 		(process.argv[2] != 'start' && process.argv[2] != 'stop')
 		? logger.log(`${$me} ${$version} starting..`):null;
 
-		if (process.argv[process.argv.length-1] == '-g'
-		||  process.argv[process.argv.length-1] == '--no-colors') ansi.disableColor();
+		(process.stdout.getColorDepth() == 1
+			|| process.argv[process.argv.length-1] == '-g'
+			|| process.argv[process.argv.length-1] == '--no-colors')
+				? ansi.disableColor():null;
 
 		switch (process.argv[2]) {
 			case 'show':
