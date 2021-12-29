@@ -127,6 +127,7 @@ Examples:
 0.0.6-alpha - 12/10/21 - more tidying up for build stuff, version numbering now npm friendly
 0.0.7-alpha - 12/10/21 - basic power and fan management for both AMD and NVIDIA now working
 0.0.8-alpha - 12/10/21 - added a splash of color, ability to disable colors and the missing 'list' command
+0.0.8-development - 12/10/21 - dev branch started
 ```
 ### TODO.md
 
