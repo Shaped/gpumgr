@@ -1,6 +1,6 @@
 #!/usr/bin/node
 /* 
-	gpumgr v0.0.8-alpha
+	gpumgr v0.0.9-development
 	gpumgr.js - gpumgr main class & entry point
 	(C) 2022 Shaped Technologies (forbiddenera/Jai B.)
 
@@ -28,7 +28,7 @@ global.asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 
 global.$me = path.basename(process.argv[1]);
 
-global.$version = `0.0.8-alpha`;
+global.$version = `0.0.9-development`;
 global.$copyright = `(C) Shaped Technologies`;
 global.$license = `GPLv3 License`;
 

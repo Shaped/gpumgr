@@ -1,4 +1,4 @@
-## gpumgr v0.0.8-alpha
+## gpumgr v0.0.8-development
 
 gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman. 
 
