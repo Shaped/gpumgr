@@ -36,7 +36,7 @@ class gpuManager {
 	constructor() {
 		this.logFile = `${$me}.log`;
 
-		this.serviceHost = `0.0.0.0`;/*::DEVELOPMENT::Don't release with 0.0.0.0, change to 127.0.0.1!! */
+		this.serviceHost = `127.0.0.1`;
 		this.servicePort = 1969;
 		this.serviceThreads = -1;
 
@@ -45,8 +45,7 @@ class gpuManager {
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
 
-		/*::DEVELOPMENT*/
-		this.developmentMode = true;
+		/*::DEVELOPMENT::*/this.developmentMode = true;
 
 		if (this?.developmentMode) logger.setCurrentLogLevel(64);
 

@@ -1,4 +1,4 @@
-## gpumgr v0.0.8-development
+## gpumgr v0.0.9-development
 
 gpumgr is a GPU manager for Linux allowing easy command line/web interface management of GPU power limits, clocks, fan speeds and more. gpumgr is multi-gpultural spiritual successor of amdpwrman. 
 
@@ -43,7 +43,7 @@ You can call the script directly and the shebang will call NodeJS.
 If you don't have NodeJS, you can download the binary version which is simply this script pre-packed with *[pkg](https://github.com/vercel/pkg)* with the required NodeJS and dependencies to run.
 
 ```
-gpumgr v0.0.8-development
+gpumgr v0.0.9-development
 
 gpumgr shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
@@ -128,6 +128,7 @@ Examples:
 0.0.7-alpha - 12/10/21 - basic power and fan management for both AMD and NVIDIA now working
 0.0.8-alpha - 12/10/21 - added a splash of color, ability to disable colors and the missing 'list' command
 0.0.8-development - 12/10/21 - dev branch started
+0.0.9-development - 12/28/21 - dev commits now signed
 ```
 ### TODO.md
 
