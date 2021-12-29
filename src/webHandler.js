@@ -1,5 +1,5 @@
 /* 
-	gpumgr v0.0.8-alpha
+	gpumgr v0.0.9-development
 	webHandler.js - gpumgr web handler - based off freeform
 	(C) 2022 Shaped Technologies (forbiddenera/Jai B.)
 
