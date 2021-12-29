@@ -17,6 +17,7 @@ class webSocketHandler {
 
 	onOpen(ws) {
 		console.log('ws opened');
+		this.handleSubscription('data');
 	}
 
 	onClose(ws) {
@@ -25,5 +26,23 @@ class webSocketHandler {
 
 	onMessage(msg) {
 		console.log(`ws message: ${msg}`);
+	}
+
+	sendMessage(message) {
+		this.ws.send(JSON.stringify(message));
+	}
+
+	handleSubscription(channel) {
+		this.sendMessage({
+			cmd : 'subscribe',
+			data : channel
+		});
+	}
+
+	handleUnsubscription(channel) {
+		this.sendMessage({
+			cmd : 'unsubscribe',
+			data : channel
+		});
 	}
 }

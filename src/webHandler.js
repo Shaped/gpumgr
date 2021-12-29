@@ -36,8 +36,6 @@ class webHandler {
 						? (cores < 2)
 						 ? cores : 2
 						 : threads;
-
-		this.workers = [];
 	}
 	
 	startListening() {
@@ -50,13 +48,15 @@ class webHandler {
 					worker.on('disconnect',this.workerDisconnect.bind(this, worker));
 					worker.on('error',this.workerError.bind(this, worker));
 					worker.on('exit', this.workerExit.bind(this, worker));
-					this.workers.push(worker);
+
+					worker.on('message', this.handleWorkerMessage.bind(this, worker));
 				}
+
 				resolve();
 			} else {
 				logger.log(LOG_LEVEL_DEBUG, `about to start listening ${this.host}:${this.port}`);
 				
-				cluster.worker.on('message', this.workerMessage.bind(this));
+				cluster.worker.on('message', this.handleMasterMessage.bind(this));
 				
 				var app = new express();
 
@@ -451,7 +451,13 @@ class webHandler {
 		:logger.log(LOG_LEVEL_PRODUCTION, `worker exited with error code: ${code}`);
 	}
 
-	workerMessage(msg) { logger.log(LOG_LEVEL_DEBUG, `received a msg: ${msg}`) }
+	handleWorkerMessage(worker, msg) {
+		logger.log(LOG_LEVEL_DEBUG, `master received a msg from worker ${worker.id}: ${msg}`)
+	}
+	
+	handleMasterMessage(worker, msg) {
+		logger.log(LOG_LEVEL_DEBUG, `worker received a msg from master ${worker.id}: ${msg}`)
+	}	
 };
 
 module.exports = webHandler;

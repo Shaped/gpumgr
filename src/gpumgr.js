@@ -24,6 +24,8 @@ global.exec = util.promisify(require('child_process').exec);
 
 global.xmlParser = require('xml2json');
 
+global.eventEmitter = require('events');
+
 global.asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 
 global.$me = path.basename(process.argv[1]);
@@ -41,6 +43,8 @@ class gpuManager {
 		this.serviceThreads = -1;
 
 		this.fd7=null;
+
+		global.events = new eventEmitter();
 
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
@@ -357,10 +361,10 @@ class gpuManager {
 				// if we're dead, then we're dead and we die, if not we can reply and get restarted
 				//console.log(util.inspect(this.fd7));
 				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);				
-			/*	this.daemonInterval = setInterval(async()=>{
-					await logger.log(`Daemon Child Reporting`);
-					this.enumerateGPUs();
-				},5000);*/
+				this.daemonInterval = setInterval(async()=>{
+					await this.enumerateGPUs();
+					events.emit('update');
+				},5000);
 			}
 		} catch(e) {
 			logger.log(`Unable to listen: ${e}`)
@@ -457,8 +461,7 @@ class gpuManager {
 							(gpu == 'all')
 							? await this.setGPUFanMode(cgpu.gpu, 'manual')
 							: (cgpu.vendorName == gpu)
-								? await this.setGPUFanMode(cgpu.gpu, 'manual')
-								: null;
+								? await this.setGPUFanMode(cgpu.gpu, 'manual') : null;
 					  break;
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -474,8 +477,7 @@ class gpuManager {
 								(gpu == 'all')
 								? await this.setGPUFanMode(cgpu.gpu, 'automatic')
 								: (cgpu.vendorName == gpu)
-									? await this.setGPUFanMode(cgpu.gpu, 'automatic')
-									: null;
+									? await this.setGPUFanMode(cgpu.gpu, 'automatic') : null;
 						  break;					
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -495,8 +497,7 @@ class gpuManager {
 							(gpu == 'all')
 							? await this.setGPUFanSpeed(cgpu.gpu)
 							: (cgpu.vendorName == gpu)
-								? await this.setGPUFanSpeed(cgpu.gpu)
-								: null;
+								? await this.setGPUFanSpeed(cgpu.gpu) : null;
 					  break;					
 					default:
 						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -522,8 +523,7 @@ class gpuManager {
 						(gpu == 'all')
 						? await this.resetGPUPower(cgpu.gpu)
 						: (cgpu.vendorName == gpu)
-							? await this.resetGPUPower(cgpu.gpu)
-							: null;
+							? await this.resetGPUPower(cgpu.gpu) : null;
 				  break;
 				default:
 					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
@@ -543,8 +543,7 @@ class gpuManager {
 						(gpu == 'all')
 						? await this.setGPUPower(cgpu.gpu, power)
 						: (cgpu.vendorName == gpu)
-							? await this.setGPUPower(cgpu.gpu, power)
-							: null;
+							? await this.setGPUPower(cgpu.gpu, power) : null;
 				  break;
 				default:
 					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
