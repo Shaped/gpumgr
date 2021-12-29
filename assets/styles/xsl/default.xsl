@@ -52,6 +52,8 @@
 
 	<script type="text/javascript" src="js/GPUTable.jsx"></script>
 	<script type="text/javascript">var _data = `<xsl:value-of select="$data" />`;</script>
+	<script type="text/javascript">var _servicePort = `<xsl:value-of select="$servicePort" />`;</script>
+	<script type="text/javascript">var _serviceHost = `<xsl:value-of select="$serviceHost" />`;</script>
 	<script type="text/javascript" src="js/app.js"></script>
 </head>
 

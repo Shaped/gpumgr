@@ -307,14 +307,14 @@ class gpuManager {
 						case '--threads':
 							if (args[i+1].substr(0,1) != '-'
 								&& Number.isInteger(parseInt(args[i+1]))
-								&& parseInt(args[i+1]) >= 1
+								&& parseInt(args[i+1]) >= 2
 								&& parseInt(args[i+1]) <= (cores*2) ) {
 								let threads = args.splice(i+1,1)[0];
 								this.serviceThreads = threads;
 							} else if (args[i+1] == '-1') {
 								this.serviceThreads = -1;
 							} else {
-								logger.log(`Invalid argument for --threads, '${args[i+1]}', threads must be a number between 1 and ${cores*2} (# of logical CPU cores * 2)`);
+								logger.log(`Invalid argument for --threads, '${args[i+1]}', threads must be a number between 2 and ${cores*2} (# of logical CPU cores * 2)`);
 								process.exit(1);								
 							}						
 						  break;
@@ -1446,9 +1446,8 @@ Usage:
                              (eg. 0.0.0.0 or 127.0.0.1, default is
                              ${this.serviceHost})
 
-      --threads <#>          Number of worker threads per local service
-                             (defaults to number of cores, up to 2
-                             times 2 services - HTTP and WebSocket)
+      --threads <#>          Number of worker threads for web service
+                             (defaults to number of cores, up to 2)
 Examples:
 
   ${$me} show nvidia             Show status of all Nvidia GPUs

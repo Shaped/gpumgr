@@ -13,6 +13,9 @@ const sass = require('sass');
 const x2j = require('xml2json');
 const saxon = require('saxon-js');
 const babel = require('@babel/core');
+const ws = require('ws');
+
+const wsHandler = require('./webSocketHandler.js');
 
 class webHandler {
 	constructor({
@@ -22,7 +25,9 @@ class webHandler {
 		threads = -1
 	}={}) {
 		this.parent = _parent;
-		this.server = http.createServer(this.handleRequest.bind(this));
+
+		this.server = http.createServer();
+
 		this.controller = new AbortController();
 		this.host = host;
 		this.port = port;
@@ -50,7 +55,18 @@ class webHandler {
 				resolve();
 			} else {
 				logger.log(LOG_LEVEL_DEBUG, `about to start listening ${this.host}:${this.port}`);
+				
+				cluster.worker.on('message', this.workerMessage.bind(this));
+				
 				var app = new express();
+
+				this.wsHandler = new wsHandler(this);
+
+				this.wsServer = new ws.Server({
+					server: this.server
+				});
+				
+				this.wsServer.on('connection', this.wsHandler.handleConnection.bind(this.wsHandler));
 				
 				app.use(this.requestLogger.bind(this));
 
@@ -63,13 +79,14 @@ class webHandler {
 				app.use(this.handleRequest.bind(this));
 				app.use('/', this.route_index.bind(this));
 
-				app.listen({
+				this.server.on('request',app);
+
+				this.server.listen({
 					host: this.host,
 					port: this.port,
 					signal: this.controller.signal
 				}, () => {
-					cluster.worker.on('message', this.workerMessage.bind(this));
-					logger.log(LOG_LEVEL_VERBOSE, `started listening on ${this.host} @ ${this.port}`)
+					logger.log(LOG_LEVEL_VERBOSE, `http/ws started listening on ${this.host} @ ${this.port}`)
 					resolve();
 				})
 			}
