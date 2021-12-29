@@ -37,7 +37,7 @@ class gpuManager {
 		this.logFile = `${$me}.log`;
 
 		this.serviceHost = `127.0.0.1`;
-		this.servicePort = 1969;
+		this.servicePort = 4242;
 		this.serviceThreads = -1;
 
 		this.fd7=null;
@@ -83,11 +83,13 @@ class gpuManager {
 
 		(process.argv[2] == '__child')
 		? (cluster.isMaster)
-			? ( logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`) )
+			? logger.log(LOG_LEVEL_ALWAYS, `${$me} ${$version} service starting..`)
 			: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
-		(process.argv[process.argv.length-1] == '-g' ||  process.argv[process.argv.length-1] == '--no-colors')
-		? ansi.disableColor():null;
+		(process.stdout.getColorDepth() == 1
+			|| process.argv[process.argv.length-1] == '-g'
+			|| process.argv[process.argv.length-1] == '--no-colors')
+				? ansi.disableColor():null;
 
 		switch (process.argv[2]) {
 			case 'show':
@@ -97,16 +99,19 @@ class gpuManager {
 		}
 
 		switch (process.argv[2]) {
-			case '--help':
-			case '-h'    :
-			case 'help'  :
-			case 'usage' :
-			case 'wtf'   : this.showUsage(); break;
-			case 'fan'   : this.handleFans(); break;
-			case 'power' : this.handlePower(); break;
-			case 'show'  : this.handleShowStatus(); break;
-			case 'list'  : this.handleListGPUs(); break;
-			case 'start':
+			case '?'      :
+			case '-h'     :
+			case '-?'     :
+			case 'help'   :
+			case '--help' :
+			case 'usage'  :
+			case '--usage':
+			case 'wtf'    : this.showUsage(); break;
+			case 'fan'    : this.handleFans(); break;
+			case 'power'  : this.handlePower(); break;
+			case 'show'   : this.handleShowStatus(); break;
+			case 'list'   : this.handleListGPUs(); break;
+			case 'start'  :
 				await this.forkOff();
 				process.exit();
 			  break;
@@ -117,6 +122,7 @@ class gpuManager {
 							//*::TODO:: almost done, took all fucking night. stupid undocumented shit.
 							let pid = await this.getChildPID();
 							await logger.log(`${$me} attempting to query child [${pid}]`);
+
 							try {
 								await this.queryOOB(pid);
 							} catch (e) {
@@ -125,6 +131,7 @@ class gpuManager {
 								await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
 								process.exit();
 							}
+
 							await logger.log(`${$me} attempting to stop daemon [${pid}]`);
 							await this.killPID(pid);
 							await logger.log(`${$me} attempting to start new daemon...`);
@@ -394,18 +401,16 @@ class gpuManager {
 				}
 			},1000);
 
-			setTimeout(()=> {
-				reject(`Pingback Timeout!`);
-			},5000);
+			setTimeout(()=> reject(`Pingback Timeout!`) ,5000);
 		});
 	}
 
 	handleOOB(chunk) {
 		if (chunk.toString().substr(0,1) == "👌") {
 			logger.log(`${process.pid}: OOBIPC query received! Sending pingback.`);
-			setTimeout(()=>{
-				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);
-			},50);
+			
+			setTimeout(()=>fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`),50);
+
 			logger.log(`${process.pid}: Sent pingback!`);
 		}
 	}
@@ -421,9 +426,7 @@ class gpuManager {
 			?	((!forceRestart)
 				? this.childProcess = child.fork(__filename, ['__child', ...args, '7>&1'], { detached:true })
 				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
-				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`))
-			:null;
-//				logger.divertToFile();
+				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)) : null;
 
 				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 		}
@@ -480,6 +483,7 @@ class gpuManager {
 				}
 			  break;
 			case 'curve':
+				/*::TODO::*/
 				await logger.log(`fan curve mode not yet impemented`);
 			  break;			
 			default:
@@ -1383,12 +1387,12 @@ Linux through various interfaces provided by manufacturer's drivers, for
 example, using the sysfs interface to interact with the amdgpu driver.
 
 Most commands will execute the command and exit. For example, using
-'${$me} fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply set
-it once and exit.
+'${$me} fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply
+set it once and exit.
 
 If you want fan speed monitoring or curve control or to use the web interface,
 you must start the daemon. Once the daemon is running, you can manage settings
-for your GPUs at http://127.0.0.1:1969 - or on whatever port you specified.
+for your GPUs at http://${this.serviceHost}:${this.servicePort} - or on whatever port you specified.
 
 Usage:
 
@@ -1404,44 +1408,55 @@ Usage:
 
   Commands with no options or only GPU specified:
 
-	help | --help | -h       	Display this help message.
-	list <gpu>               	List available GPUs and their GPU#.
-	show <gpu>               	Show detailed statistics for <gpu>.
-	status <gpu>             	Same as above.
-	power <percent> <gpu>    	Set <gpu>'s power target to <percent>.
-	power reset <gpu>        	Reset default power limit for <gpu>.
-	recover <gpu>            	Attempt driver recovery mechanism for <gpu>.
-	fan enable <gpu>         	Enable manual fan control for <gpu>.
-	fan disable <gpu>        	Disable manual fan control for <gpu>.
-	fan [percent] <gpu>      	Set <gpu>'s fan speed to <percent>.
-	start <options>          	Starts the ${$me} service.
-	restart                  	Soft Restarts the ${$me} service.
-	stop                     	Stops the ${$me} service.
-	force restart            	Fully Restarts the ${$me} service.
-	force stop               	Kills the ${$me} service.
+    help | --help | -h       Display this help message
+    list <gpu>               List available GPUs and their GPU#
+    show <gpu>               Show detailed statistics for <gpu>
+    status <gpu>             Same as above
+    power <percent> <gpu>    Set <gpu>'s power target to <percent>
+    power reset <gpu>        Reset default power limit for <gpu>
+    recover <gpu>            Try driver recovery mechanism for <gpu>
+    fan enable <gpu>         Enable manual fan control for <gpu>
+    fan disable <gpu>        Disable manual fan control for <gpu>
+    fan [percent] <gpu>      Set <gpu>'s fan speed to <percent>
+    start <options>          Starts the ${$me} service
+    restart                  Soft Restarts the ${$me} service
+    stop                     Stops the ${$me} service
+    force restart            Forcibly Restarts the ${$me} service
+    force stop               Forcibly Kills the ${$me} service
 
   Options for Commands with Options:
   
-    [any]                         	Any command with color output
+    [any]                    Options for any command
     
-      -g | --no-colors             	Disable ANSI Color formatting
+      -g | --no-colors       Disable ANSI Color formatting (colors 
+                             are automatically disabled if terminal
+                             is detected to not support color)
 
-    start 				Starts the ${$me} background service.
+    start                    Starts the ${$me} background service
 
-      --port <number>			Set which ipv4 port to listen on.
-                   			(eg. 1969, default is 4242)
-      --host <ip>    			Set which ipv4 host to listen on.
-                   			(eg. 0.0.0.0 or 127.0.0.1)
-      --threads <#>    			Number of worker threads per local service
-                   			(defaults to number of cores, upto 2)
+      --port <number>        Set which IPv4 port to listen on for
+                             HTTP requests (eg. 1969, default is ${this.servicePort})
+
+      --wsport <number>      Set which IPv4 port to listen on for
+                             WebSocket requests (eg. 1970, default is
+                             HTTP request port + 2, so the port would
+                             default to ${this.servicePort+2} if --port is not set)
+
+      --host <ip>            Set which IPv4 host to listen on.
+                             (eg. 0.0.0.0 or 127.0.0.1, default is
+                             ${this.serviceHost})
+
+      --threads <#>          Number of worker threads per local service
+                             (defaults to number of cores, up to 2
+                             times 2 services - HTTP and WebSocket)
 Examples:
 
-  ${$me} show nvidia               	Show status of all Nvidia GPUs
-  ${$me} list Intel              	List all Intel GPU#s
-  sudo ${$me} fan enable 0       	Enable manual fan control for GPU0
-  sudo ${$me} fan disable all    	Enable auto fan control for all GPUs
-  sudo ${$me} fan 100% 0         	Set GPU0 fan speed to 100%
-  sudo ${$me} start --port 4200  	Start the background service on port 4200
+  ${$me} show nvidia             Show status of all Nvidia GPUs
+  ${$me} list Intel              List all Intel GPU#s
+  sudo ${$me} fan enable 0       Enable manual fan control for GPU0
+  sudo ${$me} fan disable all    Enable auto fan control for all GPUs
+  sudo ${$me} fan 100% 0         Set GPU0 fan speed to 100%
+  sudo ${$me} start --port 4200  Start the background service on port 4200
 `;
 ///////////////////////////////////////////////////////////////////////////////
 
