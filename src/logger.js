@@ -5,7 +5,7 @@
 
 	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
-
+"use strict"
 global.LOG_LEVEL_FATAL 			= 1;
 global.LOG_LEVEL_ALWAYS 		= 2;
 global.LOG_LEVEL_PRODUCTION 	= 4;
@@ -87,6 +87,9 @@ class logger {
         }
 
         if (message != ``) {
+        	let mem = process.memoryUsage();
+
+			// const msg = `[${process.pid}: ${mem.heapUsed + mem.arrayBuffers + mem.external} : ${mem.heapTotal} / ${mem.rss} ${timestamp} |${messageLogLevelName}| ${profileTime}] ${message}`;
 			const msg = `[${process.pid}: ${timestamp} |${messageLogLevelName}| ${profileTime}] ${message}`;
 
 			if (this.stdout)

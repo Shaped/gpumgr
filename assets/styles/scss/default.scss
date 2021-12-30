@@ -50,12 +50,17 @@ body {
 	font-family: "Ubuntu",Calibri, Candara, Segoe, Segoe UI, Optima, Arial, sans-serif;
 	font-weight: 300;
 	display: grid;
-	grid-template-rows: [header] 8em [main] auto [footer] 2em;
-	grid-template-columns: [menu] 8em [main] auto;
+	grid-template-rows: [header] 6em [main] auto [footer] 2em;
+	grid-template-columns: [menu] 10em [main] auto;
 	grid-template-areas:
-		"header header"
+		"menu header"
 		"menu main" 
 		"footer footer";
+	transition: grid-template-columns 0.5s;
+}
+
+body.menuHidden {
+	grid-template-columns: [menu] 0em [main] auto;
 }
 
 header {
@@ -80,11 +85,11 @@ header div.right {
 	align-self:center;
 }
 
-header div.logo img {
+/*header div.logo img {
 	height: 6em;
 	padding-left: calc(0.5em + 2px);
 	padding-right: calc(1.5em + 2px);
-}
+}*/
 
 header div.logoText {
 	display: flex;
@@ -113,11 +118,21 @@ header div.logoText span.sloganText {
 nav {
 	@include no-select;
 	grid-area: menu;
+	overflow: hidden;
 	background-color: #87afd9;
 	border-right: 4px solid #87afd9;
 }
 
+nav div.logoImage {
+	width: 10em;
+	text-align: center;
+}
+nav div.logoImage img {
+	height: 6em;
+}
+
 nav menu {
+	width: 10em;
 	list-style-type: none;
 	padding: 0;
 	margin: 0;

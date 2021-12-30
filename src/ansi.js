@@ -4,7 +4,7 @@
 */ 
 
 class ansi {
-    constructor(_parent) {
+    constructor() {
         this.Reset = "\x1b[0m";
         this.Bright = "\x1b[1m";
         this.Dim = "\x1b[2m";
@@ -47,4 +47,4 @@ class ansi {
     }
 };
 
-module.exports = (p) => { return new ansi(p); }
+module.exports = () => { return new ansi(); }

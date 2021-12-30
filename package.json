@@ -48,6 +48,8 @@
 	},
 	"dependencies": {
 		"express": "^4.17.1",
+		"mmap-object": "^1.5.0",
+		"pidusage": "^3.0.0",
 		"sass": "^1.45.0",
 		"saxon-js": "^2.3.0",
 		"ws": "^8.4.0",

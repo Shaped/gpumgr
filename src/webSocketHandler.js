@@ -5,10 +5,10 @@
 
 	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
+"use strict";
 
 class webSocketHandler {
-	constructor(_parent) {
-		this.parent = _parent;
+	constructor() {
 		this.lastSocket=null;
 
 		this.subscriptions = [];
@@ -17,7 +17,7 @@ class webSocketHandler {
 	handleConnection(ws) {
 		this.lastSocket=ws;
 
-		logger.log(`ws handleConnection: ${util.inspect(ws)}`);
+		//logger.log(`ws handleConnection: ${util.inspect(ws)}`);
 	//	ws.on('message', this.handleMessage.bind(this, ws));
 		ws.on('close', this.handleClose.bind(this, ws));
 

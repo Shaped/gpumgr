@@ -18,19 +18,15 @@ class gpumgrUI {
 			this.sortable.initialize();
 		}, { once: true });
 
+		Array.from(document.querySelectorAll(`.menu_toggle`)).forEach((el,i) => {
+			el.addEventListener('click', (ev) => document.body.classList.toggle('menuHidden'));
+		});
+
 	    csstheme_selector.addEventListener('change', this.handle_themeSelect.bind(this));
 	}
 
 	handle_themeSelect(ev) {
-		let theme = 'default';
-
-		switch (ev.target.value) {
-			case 'default-dark':
-				theme = 'default-dark';
-			  break;
-		}
-
-		csstheme.href = `/css/${theme}.css`;
+		csstheme.href = `/css/${ev.target.value ?? 'default'}.css`;
 	}
 
 	loadReactComponents() {

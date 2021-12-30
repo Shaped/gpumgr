@@ -5,17 +5,7 @@
 
 	gpumgr is a Linux-based GPU manager with console and web-based interfaces
 */
-
-//*::TODO::maybe try and move these to only load when actually needed
-const http = require('http');
-const express = require('express');
-const sass = require('sass');
-const x2j = require('xml2json');
-const saxon = require('saxon-js');
-const babel = require('@babel/core');
-const ws = require('ws');
-
-const wsHandler = require('./webSocketHandler.js');
+"use strict";
 
 class webHandler {
 	constructor({
@@ -25,42 +15,53 @@ class webHandler {
 		threads = -1
 	}={}) {
 		this.parent = _parent;
-
-		this.server = http.createServer();
-
-		this.controller = new AbortController();
 		this.host = host;
 		this.port = port;
 
-		this.threads = (threads == -1)
-						? (cores < 2)
-						 ? cores : 2
-						 : threads;
+		this.workersAlive = 0;
+		this.controller = new AbortController();
+
+		this.threads = (threads == -1) 
+						? ($cores < 4)
+						 ? ($cores==1)
+						  ? 2:$cores
+						: 2 : threads;
 	}
 	
 	startListening() {
-		return new Promise((resolve,reject) => {
+		return new Promise(async(resolve,reject) => {
 			if (cluster.isMaster) {
+				this.parent.shm = new mmap.Create('/tmp/gpumgr.shm');
+
 				for (var i=0;i<this.threads;i++) { 
 					var worker = cluster.fork();
 
-					worker.on('listening',this.workerListening.bind(this, worker));
-					worker.on('disconnect',this.workerDisconnect.bind(this, worker));
-					worker.on('error',this.workerError.bind(this, worker));
-					worker.on('exit', this.workerExit.bind(this, worker));
+					worker.on('listening',this.workerListening.bind(this, worker, resolve));
+					worker.on('disconnect',this.workerDisconnect.bind(this, worker, reject));
+					worker.on('error',this.workerError.bind(this, worker, reject));
+					worker.on('exit', this.workerExit.bind(this, worker, reject));
 
 					worker.on('message', this.handleWorkerMessage.bind(this, worker));
 				}
 
-				resolve();
+				// resolve();
 			} else {
+				this.parent.shm = new mmap.Open('/tmp/gpumgr.shm');
+				const http = require('http');
+				const express = require('express');
+				const ws = require('ws');
+				const wsHandler = require('./webSocketHandler.js');
+		
+				this.server = http.createServer();
+
 				logger.log(LOG_LEVEL_DEBUG, `about to start listening ${this.host}:${this.port}`);
 				
 				cluster.worker.on('message', this.handleMasterMessage.bind(this));
-				
+				process.on('message', this.handleProcessMessage.bind(this));
+
 				var app = new express();
 
-				this.wsHandler = new wsHandler(this);
+				this.wsHandler = new wsHandler();
 
 				this.wsServer = new ws.Server({
 					server: this.server
@@ -94,6 +95,8 @@ class webHandler {
 	}
 
 	compileSCSS(cssfile) {
+		const sass = require('sass');
+
 		let scssfile = cssfile.replace('.css','.scss');
 		logger.log(LOG_LEVEL_DEVELOPMENT, `SCSS Cache Miss | Compiling styles/scss/${scssfile} > cache/css/${cssfile}`);
 
@@ -181,6 +184,8 @@ class webHandler {
 	}
 
 	compileJSX(jsxfile) {
+		const babel = require('@babel/core');
+
 		let jsfile = jsxfile.replace('.jsx','.js');
 		logger.log(LOG_LEVEL_DEVELOPMENT,`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
 
@@ -324,23 +329,48 @@ class webHandler {
 
 	compileXSLT(template) {
 		let sefFile = template.replace(`.xsl`,`.sef.json`)
-		const env = saxon.getPlatform();
+		const env = this.saxon.getPlatform();
 		const doc = env.parseXmlFromString(env.readFile(`../assets/styles/xsl/${template}`));
 		doc._saxonBaseUri = "file:///"; // ?from.s.o.? hack: avoid error "Required cardinality of value of parameter $static-base-uri is exactly one; supplied value is empty"
 
 		logger.log(LOG_LEVEL_DEBUG, `load/parse xsl done, about to compile`);
-		let sef = saxon.compile(doc);
+		let sef = this.saxon.compile(doc);
 		logger.log(LOG_LEVEL_DEBUG, `compilation complete, saving sefcache`);
 
 		fs.writeFileSync(`../assets/cache/sef/${sefFile}`, JSON.stringify(sef), `utf8`);
 	  return sef;
 	}					
 
+	requestStatsFromMaster() {
+		process.send({
+			cmd:'getStats',
+			worker: cluster.worker.id
+		});
+	}
+
+	subscribeStatsFromMaster() {
+		process.send({
+			cmd:'subscribe',
+			worker: cluster.worker.id
+		});		
+	}
+
+	unsubscribeStatsFromMaster() {
+		process.send({
+			cmd:'unsubscribe',
+			worker: cluster.worker.id
+		});		
+	}
+
 	async route_index(req,res) {
+		this.saxon = require('saxon-js');
+
 		await this.parent.enumerateGPUs();
 
+		this.requestStatsFromMaster();
+
 		let data = {
-			GPUs: {}
+			GPUs: {},
 		};
 
 		for (let gpu of this.parent.GPUs) {
@@ -349,10 +379,12 @@ class webHandler {
 			};
 		}
 
+		//data.stats =  // having to parse it is hmmmmmmmmmm
+
 		logger.log(LOG_LEVEL_DEBUG, `About to process XSLT with ${util.inspect(data)}`);
 
 		try {
-			let xmlData = x2j.toXml(data); // wasn't the whole point of saxon that it was suppose to take json stuffed in?
+			let xmlData = xmlParser.toXml(data); // wasn't the whole point of saxon that it was suppose to take json stuffed in?
 			
 			let template = `default.xsl`;
 
@@ -395,7 +427,7 @@ class webHandler {
 				sef = JSON.parse(fs.readFileSync(`../assets/cache/sef/${sefFile}`, `utf8`));
 			}
 
-			const resultStringXML = saxon.transform({
+			const resultStringXML = this.saxon.transform({
 						stylesheetInternal: sef,
 						sourceText: xmlData,
 						//sourceType: 'json', // again: wasn't the whole point of saxon that it was suppose to take json stuffed in?
@@ -408,7 +440,8 @@ class webHandler {
 						      "version": [[$version]],
 						      "serviceHost": [[this.host]],
 						      "servicePort": [[this.port]],
-						      "data" : [[JSON.stringify(this.parent.GPUs)]]
+						      "data" : [[JSON.stringify(this.parent.GPUs)]],
+						      "stats" : [[this.parent.shm['data']]]
 						   }
 				});
 
@@ -440,25 +473,58 @@ class webHandler {
 		logger.log(LOG_LEVEL_DEBUG, `stopped listening`);
 	}
 
-	workerListening(worker, ev) { logger.log(LOG_LEVEL_DEVELOPMENT, `worker ${worker.id} listening ${util.inspect(ev)}`) }
+	workerListening(worker, resolve, ev) {
+		this.workersAlive++;
 
-	workerDisconnect(worker, ev) { logger.log(LOG_LEVEL_DEBUG, `worker ${worker.id} disconnect ${util.inspect(worker)}`) }
+		logger.log(LOG_LEVEL_DEVELOPMENT, `worker ${worker.id} listening ${util.inspect(ev)}`);
 
-	workerError(worker, err) { logger.log(LOG_LEVEL_PRODUCTION, `worker ${worker.id} error ${util.inspect(err)}`) }
+		if (this.workersAlive == this.threads) {
+			resolve();
+		}
+	}
 
-	workerExit(code, signal)  {
+	workerDisconnect(worker, reject, ev) {
+		this.workersAlive--;
+
+		logger.log(LOG_LEVEL_DEBUG, `worker ${worker.id} disconnect ${util.inspect(worker)}`);
+		reject();
+	}
+
+	workerError(worker, reject, err) {
+		this.workersAlive--;
+
+		logger.log(LOG_LEVEL_PRODUCTION, `worker ${worker.id} error ${util.inspect(err)}`);
+
+		reject();
+	}
+
+	workerExit(code, reject, signal)  {
+		this.workersAlive--;
 		(signal) 
 		?logger.log(LOG_LEVEL_PRODUCTION, `worker was killed by signal: ${signal}`)
-		:logger.log(LOG_LEVEL_PRODUCTION, `worker exited with error code: ${code}`);
+		:logger.log(LOG_LEVEL_PRODUCTION, `worker exited with error : ${util.inspect(code)}`);
+
+		reject();
 	}
 
-	handleWorkerMessage(worker, msg) {
-		logger.log(LOG_LEVEL_DEBUG, `master received a msg from worker ${worker.id}: ${msg}`)
+	handleWorkerMessage(worker, message) {
+		logger.log(`handleWorkerMessage workerId ${worker.id}: ${message}`);
+		//logger.log(`webHandler: master received a msg from worker ${worker.id}: ${msg?.message}`)
 	}
 	
-	handleMasterMessage(worker, msg) {
-		logger.log(LOG_LEVEL_DEBUG, `worker received a msg from master ${worker.id}: ${msg}`)
-	}	
+	handleMasterMessage(msg) {
+		switch(msg.cmd) {
+			case 'updateData':
+				logger.log(`worker received a msg from master ${cluster.worker.id}: ${msg.data}`);
+			  break;
+			default:
+				logger.log(`worker received an unknown msg from master ${cluster.worker.id}`);
+		}
+	}
+
+	handleProcessMessage(msg) {
+		logger.log(`processmgsg ${msg}`)
+	}
 };
 
 module.exports = webHandler;

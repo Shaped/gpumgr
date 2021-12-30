@@ -18,6 +18,7 @@
 <xsl:param name="serviceHost" as="array(*)"/>
 <xsl:param name="servicePort" as="array(*)"/>
 <xsl:param name="data" as="array(*)"/>
+<xsl:param name="stats" as="array(*)"/>
 
 <xsl:template 
 	name="default"
@@ -53,6 +54,7 @@
 
 	<script type="text/javascript" src="js/GPUTable.jsx"></script>
 	<script type="text/javascript">var _data = `<xsl:value-of select="$data" />`;</script>
+	<script type="text/javascript">var _stats = `<xsl:value-of select="$stats" />`;</script>
 	<script type="text/javascript">var _servicePort = `<xsl:value-of select="$servicePort" />`;</script>
 	<script type="text/javascript">var _serviceHost = `<xsl:value-of select="$serviceHost" />`;</script>
 
@@ -65,8 +67,7 @@
 <body>
 <header>
 	<div class="logo">
-		<img src="/img/gpumgr-logo.png" />
-		<div class="logoText">
+		<div class="logoText menu_toggle">
 			<span class="logoText">gpumgr<small>.js</small></span>
 			<span class="sloganText">Linux GPU Management Tool</span>
 		</div>
@@ -84,11 +85,15 @@
 	</div>
 </header>
 <nav>
+	<div class="logoImage menu_toggle">
+		<img src="/img/gpumgr-logo.png" />
+	</div>
 	<menu>
-		<li class="active">Dashboard</li>
-		<li>GPU Settings</li>
-		<li>Monitoring</li>
-		<li>Preferences</li>
+		<li id="menu_dashboard" class="active">Dashboard</li>
+		<li id="menu_details">GPU&#0160;Details</li>
+		<li id="menu_management">Management</li>
+		<li id="menu_monitoring">Monitoring</li>
+		<li id="menu_preferences">Preferences</li>
 	</menu>
 </nav>
 <main>
