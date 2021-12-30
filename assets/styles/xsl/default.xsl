@@ -14,6 +14,7 @@
 <xsl:param name="metaDescription" as="array(*)"/>
 <xsl:param name="revisitAfter" as="array(*)"/>
 <xsl:param name="currentYear" as="array(*)"/>
+<xsl:param name="version" as="array(*)"/>
 <xsl:param name="serviceHost" as="array(*)"/>
 <xsl:param name="servicePort" as="array(*)"/>
 <xsl:param name="data" as="array(*)"/>
@@ -29,7 +30,7 @@
 	<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 
-	<link rel="stylesheet" type="text/css" href="css/default.css" />
+	<link id="csstheme" rel="stylesheet" type="text/css" href="css/default.css" />
 
 	<title><xsl:value-of select="$pageTitle" /></title>
 
@@ -55,6 +56,8 @@
 	<script type="text/javascript">var _servicePort = `<xsl:value-of select="$servicePort" />`;</script>
 	<script type="text/javascript">var _serviceHost = `<xsl:value-of select="$serviceHost" />`;</script>
 
+	<script type="text/javascript" src="js/sortable/sortable.js"></script>
+
 	<script type="text/javascript" src="js/webSocketHandler.js"></script>
 	<script type="text/javascript" src="js/app.js"></script>
 </head>
@@ -69,9 +72,25 @@
 		</div>
 	</div>
 	<div class="right">
+		<div>
+			<select id="csstheme_selector">
+				<option disabled="disabled">Select Theme</option>
+				<option disabled="disabled">---</option>
+				<option value="default">Default (light)</option>
+				<option value="default-dark">Default (dark)</option>
+			</select>
+		</div>
 		<p alt="This should be 127.0.0.1 unless you need to access gpumgr from a remote system!">Listening on http://<xsl:value-of select="$serviceHost" />:<xsl:value-of select="$servicePort" /></p>
 	</div>
 </header>
+<nav>
+	<menu>
+		<li class="active">Dashboard</li>
+		<li>GPU Settings</li>
+		<li>Monitoring</li>
+		<li>Preferences</li>
+	</menu>
+</nav>
 <main>
 	<div class="cardWrapper">
 		<div class="card wide" id="card-GPUTable">
@@ -114,7 +133,7 @@
 	<div id="reactRoot" />
 </main>
 <footer>
-	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr</a>&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>
+	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr.js</a>&#0160;v<xsl:value-of select="$version" />&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>
 </footer>
 </body>
 </html>

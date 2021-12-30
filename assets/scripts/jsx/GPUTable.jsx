@@ -10,6 +10,13 @@ class GPUTableFactory {
 }
 
 class GPUTable extends React.Component {
+	componentDidMount() {
+		window.dispatchEvent(
+			new CustomEvent('sortableComponentMounted',
+				{ detail: { component: this.__proto__.constructor.name } })
+		);
+	}
+
 	render() {
 		let NoGPUs = (<>
 				<h2>No GPUs were found!</h2>
@@ -19,7 +26,7 @@ class GPUTable extends React.Component {
 
 		let GPUTable = (<>
 			<h2>GPUs Found:</h2>
-			<table className="gpuTable">
+			<table className="sortable gpuTable">
 				<thead>
 					<tr>
 						<td>ID</td>

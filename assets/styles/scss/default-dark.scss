@@ -1,14 +1,14 @@
-/** gpumgr default theme (light) **/
+/** gpumgr default theme (dark) **/
 
-$primary: #000;
+$primary: #fff;
 $secondary: #333555;
-$background: #fff;
+$background: #000;
 
 $lightShades: #E7F0C3;
 $lightAccent: #F0CF85;
 $mainBrand: #5BBFBA;
 $mainAccent: #A4D4AE;
-$darkShades: #5F6CAF;
+$darkShades: #ABABAB;
 $darkAccent: #CC6C65;
 
 $darkGrey: rgb(32,32,32);
@@ -44,29 +44,25 @@ html,body {
 	padding:0;
 	width:100%;
 	height:100%;
+	background-color: black;
 }
 
 body {
 	font-family: "Ubuntu",Calibri, Candara, Segoe, Segoe UI, Optima, Arial, sans-serif;
 	font-weight: 300;
 	display: grid;
-	grid-template-rows: [header] 8em [main] auto [footer] 2em;
-	grid-template-columns: [menu] 8em [main] auto;
-	grid-template-areas:
-		"header header"
-		"menu main" 
-		"footer footer";
+	grid-template-rows: [header] 12em [main] auto [footer] 4em;
 }
 
 header {
 	@include no-select;
-	grid-area: header;
 	padding: 0.5em;
 	display:flex;
 	justify-content: space-between;
 	width: 100%;
-	background-color: #71d7ff;
-	color: black;
+	background-color: #144d64;
+	border-bottom: 4px solid $medGrey;
+	color: #eeeeee;
 	position: sticky;
 	top: 0;
 	z-index: 1;
@@ -81,9 +77,7 @@ header div.right {
 }
 
 header div.logo img {
-	height: 6em;
-	padding-left: calc(0.5em + 2px);
-	padding-right: calc(1.5em + 2px);
+	height: 10em;
 }
 
 header div.logoText {
@@ -94,7 +88,7 @@ header div.logoText {
 }
 
 header div.logoText span.logoText small {
-	color: #686868;
+	color: #a0a0a0;
 	font-size: 0.65em;
 }
 header div.logoText span.logoText {
@@ -110,38 +104,8 @@ header div.logoText span.sloganText {
 	font-size: 1.25em;
 }
 
-nav {
-	@include no-select;
-	grid-area: menu;
-	background-color: #87afd9;
-	border-right: 4px solid #87afd9;
-}
-
-nav menu {
-	list-style-type: none;
-	padding: 0;
-	margin: 0;
-}
-
-nav menu li {
-	padding: 1em;
-	text-align: center;
-	font-size: 1.1em;
-	background-color: #6792bf;
-}
-
-nav menu li:hover {
-	filter:brightness(125%);
-}
-
-nav menu li.active {
-	background-color: #dd72b3;
-}
-
 main {
 	@include no-select;
-	grid-area: main;
-	border-top: 4px solid #87afd9;
 	padding: 0.5em;
 }
 
@@ -189,6 +153,7 @@ main div.card {
 	flex-grow: 1;
 	transition: box-shadow 0.333s;
 	flex-basis: calc(33% - 2em);
+	background-color: $darkGrey;
 }
 
 main div.card h1 {
@@ -216,8 +181,7 @@ main div.card.full {
 
 footer {
 	@include no-select;
-	grid-area: footer;
-	padding: 0.25em;
+	padding: 0.5em;
 	font-family: 'Ubuntu';
 	background-color: rgb(222,222,222);
 	display: grid;
@@ -225,7 +189,6 @@ footer {
 	align-items:center;
 	height:100%;
 	border-top: 4px solid rgb(196,196,196);
-	font-size:0.9em;
 }
 
 footer a {
@@ -237,6 +200,55 @@ footer a:visited {
 	color:black;
 }
 
-@import "sortable.scss";
-@import "material-icons.scss";
-@import "google-fonts.scss";
+/*
+	google fonts should be locally saved
+*/
+/* latin */
+@font-face {
+  font-family: 'Teko';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/teko/v10/LYjCdG7kmE0gdQhfsCRgqA.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Teko';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/teko/v10/LYjNdG7kmE0gfaN9pQ.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Teko';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/teko/v10/LYjCdG7kmE0gdVBesCRgqA.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Ubuntu';
+  font-style: normal;
+  font-weight: 300;
+  src: url(https://fonts.gstatic.com/s/ubuntu/v15/4iCv6KVjbNBYlgoC1CzjsGyN.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Ubuntu';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/ubuntu/v15/4iCu6KVjbNBYlgoKej70l0k.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Ubuntu';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/ubuntu/v15/4iCv6KVjbNBYlgoCjC3jsGyN.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

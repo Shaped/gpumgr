@@ -1,0 +1,34 @@
+table.sortable thead tr:first-child {
+        user-select: none;
+        cursor: pointer;
+}
+
+// requires material icons to be loaded
+table td.sortable_asc::before {
+        font-family: "Material Icons";
+        content: "\e5c5"; // up arrow
+}
+table td.sortable_desc::before {
+        font-family: "Material Icons";
+        content: "\e5c7"; // down arrow
+}
+
+table td.sortable_active {
+        font-weight: bold;
+}table.sortable thead tr:first-child {
+	user-select: none;	
+	cursor: pointer;
+}
+
+table td.sortable_asc::before {
+	font-family: "Material Icons";
+	content: "\e5c5";
+}
+table td.sortable_desc::before {
+	font-family: "Material Icons";
+	content: "\e5c7";
+}
+
+table td.sortable_active {
+	font-weight: bold;
+}

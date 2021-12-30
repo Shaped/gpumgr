@@ -18,10 +18,10 @@ class webSocketHandler {
 		this.lastSocket=ws;
 
 		logger.log(`ws handleConnection: ${util.inspect(ws)}`);
-		ws.on('message', this.handleMessage.bind(this, ws));
+	//	ws.on('message', this.handleMessage.bind(this, ws));
 		ws.on('close', this.handleClose.bind(this, ws));
 
-		worker.on('message', this.handleWorkerMessage.bind(this, ws));
+		//worker.on('message', this.handleWorkerMessage.bind(this, ws));
 	}
 
 	handleWorkerMessage(message, ws) {
@@ -30,9 +30,10 @@ class webSocketHandler {
 
 	handleMessage(message, ws) {
 		this.lastSocket=ws;
+		var parsed=null;
 
 		try {
-			let parsed = JSON.parse(message);
+			parsed = JSON.parse(message);
 		} catch (e) {
 			logger.log(e);
 			this.handleInvalidRequest(ws, `Invalid WebSocket Request`);
@@ -53,15 +54,14 @@ class webSocketHandler {
 	sendMessage(message, ws = null) {
 		message = JSON.stringify(message);
 
-		if (ws==null) {
-			if (this.lastSocket == null) {
+		if (ws==null)
+			if (this.lastSocket == null) 
 				throw new Error("No socket to send message to!");
-			} else {
+			else
 				this.lastSocket.send(message);
-			}
-		} else {
-			ws.send(message);
-		}
+		else
+		//	ws.send(message);
+			logger.log(message);
 	}
 
 	handleSubscription(channel, ws) {
@@ -110,9 +110,9 @@ class webSocketHandler {
 	}
 
 	handleInvalidRequest(ws, ...args) {
-		ws.send(JSON.stringify({
+		/*ws.send(JSON.stringify({
 			"🤦‍♂️":[...args]
-		}));
+		}));*/
 
 		logger.log(...args);
 	}

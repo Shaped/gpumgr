@@ -405,6 +405,7 @@ class webHandler {
 						      "metaDescription": [["gpumgr is a Linux GPU manager with CLI and web interfaces."]],
 						      "revisitAfter": [["3 days"]],
 						      "currentYear": [[new Date().getFullYear()]],
+						      "version": [[$version]],
 						      "serviceHost": [[this.host]],
 						      "servicePort": [[this.port]],
 						      "data" : [[JSON.stringify(this.parent.GPUs)]]

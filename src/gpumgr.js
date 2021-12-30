@@ -24,8 +24,6 @@ global.exec = util.promisify(require('child_process').exec);
 
 global.xmlParser = require('xml2json');
 
-global.eventEmitter = require('events');
-
 global.asleep = (ms) => new Promise((res)=>setTimeout(res,ms));
 
 global.$me = path.basename(process.argv[1]);
@@ -43,8 +41,6 @@ class gpuManager {
 		this.serviceThreads = -1;
 
 		this.fd7=null;
-
-		global.events = new eventEmitter();
 
 		global.ansi = require('./ansi.js')(this);
 		global.logger = require("./logger.js")(this);
@@ -363,7 +359,7 @@ class gpuManager {
 				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);				
 				this.daemonInterval = setInterval(async()=>{
 					await this.enumerateGPUs();
-					events.emit('update');
+					
 				},5000);
 			}
 		} catch(e) {

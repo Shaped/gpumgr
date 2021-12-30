@@ -1,0 +1,3 @@
+[submodule "assets/pub/js/sortable"]
+	path = assets/pub/js/sortable
+	url = https://github.com/Shaped/sortable
