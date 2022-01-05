@@ -90,7 +90,7 @@ class logger {
         	let mem = process.memoryUsage();
 
 			// const msg = `[${process.pid}: ${mem.heapUsed + mem.arrayBuffers + mem.external} : ${mem.heapTotal} / ${mem.rss} ${timestamp} |${messageLogLevelName}| ${profileTime}] ${message}`;
-			const msg = `[${process.pid}: ${timestamp} |${messageLogLevelName}| ${profileTime}] ${message}`;
+			const msg = `[${process.pid}: ${timestamp}${(messageLogLevelName!="ALWAYS")?' |'+messageLogLevelName+'|':''} ${profileTime}] ${message}`;
 
 			if (this.stdout)
 				console.log(msg);

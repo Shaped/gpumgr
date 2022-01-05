@@ -39,6 +39,13 @@ class ansi {
         this.BgMagenta = "\x1b[45m";
         this.BgCyan = "\x1b[46m";
         this.BgWhite = "\x1b[47m";
+
+        this.TeamRed = this.Bright+this.FgBrRed;
+        this.TeamBlue = this.Bright+this.FgBrBlue;
+        this.TeamGreen = this.Bright+this.FgBrGreen;
+
+        this.Bold = this.Bright;
+        this.BBW = this.Bright+this.FgBrWhite;
     }
     disableColor() {
         let keys = Object.keys(this);

@@ -20,6 +20,10 @@
   - ** cache google fonts; we can't load them remotely over https without a cert/being on https ourselves
     - easy way is to just wget and statically link
     - might be nice to have something that can pull them from a file but eh
+- other gpu stuff
+  - nvml/libdrm stuff, default driver info?
+  - root not needed/(wanted?) for nv-settings? bleh
+  - pursue intelk
 - add ability to change clocks and other features
   - is there *any* way to change NVIDIA clocks without X?
   - I haven't seen anything really, although the amdpwrman reddit thread had some links to other programs doing good things

@@ -78,7 +78,7 @@ class webHandler {
 				app.use('/img', express.static('../assets/pub/img'));
 
 				app.use(this.handleRequest.bind(this));
-				app.use('/', this.route_index.bind(this));
+				app.use('/', this.route_index.bind(this)); //*::TODO:: seems to route pages it shouldnt to /
 
 				this.server.on('request',app);
 
@@ -249,7 +249,7 @@ class webHandler {
 			fs.writeFileSync(`../assets/cache/js/${jsfile}`, rendered, 'utf8');
 		} catch (e) {
 			logger.log(util.inspect(e)); // log then
-			throw new Error(e); // up the chain, so we get 404/500
+			throw new Error(e);
 		}
 
 		return rendered;
@@ -301,7 +301,7 @@ class webHandler {
 
 			res.type(`text/javascript`);
 			res.send(`${result}`);
-		} catch (e) {
+		} catch (e) { //*::TODO::* catch say 500 if actually a 500...
 			logger.log(util.inspect(e));
 			res.type('text/html').status(404).send('404 Error');
 		}

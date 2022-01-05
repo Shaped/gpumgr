@@ -9,6 +9,7 @@
 "use strict";
 
 global.fs = require('fs');
+global.fsp = require('fs').promises;
 global.cluster = require('cluster');
 global.util = require('util');
 global.xmlParser = require('xml2json');
@@ -16,6 +17,7 @@ global.xmlParser = require('xml2json');
 global.mmap = require('mmap-object'); //*::TODO:: wtf 1359 packages ?@!$ // tho seems to work, doesn't seem to even make much fatter mem wise ? i mean its supposed to save mem anyway 
 										//*::TODO:: decide whether to use this or simply ipc/mp; have to use ipc/mp anyway so..but
 										//*::TODO:: this would use less memory maybe "technically".. benchmark says about <=>
+										// also there's mmap-io, seems smaller but not as high level
 const path = require('path');
 const os = require('os');
 const pidusage = require('pidusage');
@@ -275,6 +277,75 @@ class gpuManager {
 		}
 	}
 
+	async handleGPUArgument(arg, cb) {
+		let regexp = /,/g;
+		switch (arg) {
+			case 'all': case 'nvidia': case 'amd': case 'intel':
+				for (let cgpu of this.GPUs)
+					(arg == 'all')
+					? await cb(cgpu.gpu)
+					: (cgpu.vendorName == arg)
+						? await cb(cgpu.gpu)
+						: null;
+			  break;
+			default:
+				let gpus = [];
+				if (typeof arg !== 'undefined') {
+					let matches = arg.split(regexp);
+
+					(matches[0]=='' && matches[1]=='')
+					? ( logger.log(`Invalid value '${arg}' specified in GPU list.`), process.exit(1) ):null;
+
+					if (matches.length > 1) {
+						let i=0;
+						for (let match of matches) { i++;
+							if (!Number.isInteger(parseInt(match))) {
+								switch (match) {
+									case 'nvidia': case 'amd': case 'intel':
+										for (let cgpu of this.GPUs)
+											if (cgpu.vendorName == match) 
+												gpus.push(cgpu.gpu);
+									  break;
+									default:
+										(match == '' || !Number.isInteger(parseInt(match)))
+										? ( logger.log(`Invalid value '${match}' specified in GPU list at position ${i}.`), 
+											gpus.push(-1)
+										):gpus.push(match);
+								}
+							} else {
+								gpus.push(match);
+							}
+						}
+					} else {
+						if (!Number.isInteger(parseInt(arg))) {
+							logger.log(`Invalid value '${arg}' specified in GPU list.`);
+							process.exit(1);
+						} else {
+							gpus.push(arg);
+						}
+					}
+				} else {
+					gpus.push(0);
+				}
+
+				if (gpus.length > 1) {
+					let uGPUs = [...new Set(gpus)];
+					for (let gpu of uGPUs) (gpu != -1)
+						? (typeof this.GPUs[gpu] === 'undefined')
+							? logger.log(`GPU${gpu} not found!`)
+							: await cb(gpu) : null;
+				} else {
+					let gpu = gpus[0];
+					(typeof this.GPUs[gpu] === 'undefined')
+					?	(typeof this.GPUs[0] === 'undefined')
+						?( logger.log(`GPU${arg} not found - no GPU0 to fallback to.`), process.exit(1) )
+						:( logger.log(`GPU${arg} not found - defaulting to GPU0.`), gpu = 0 )
+					:null;
+					await cb(gpu);
+				}
+		}
+	}	
+
 	async getChildPID() { return (fs.readFileSync(`/tmp/gpumgr.pid`, `utf8`)); }
 
 	killPID(pid, signal = 'SIGINT', timeout = 5) {
@@ -487,6 +558,14 @@ class gpuManager {
 		}
 	}
 
+	async stopDaemon() {
+		this.webHandler.stopListening();
+		
+		clearInterval(this.daemonInterval);
+
+		await logger.log(`${$me} ${$version} daemon shutting down.`);
+	}
+
 	updateWorker(worker) {
 		cluster.workers[worker].send({
 			cmd: 'updateData',
@@ -527,7 +606,7 @@ class gpuManager {
 
 				pids.push(process.pid);
 
-				let stats = await this.pidUsage(pids);
+				let stats = await this.getPIDUsage(pids);
 
 				let totalCPU=0;
 				let totalMemory=0;
@@ -561,21 +640,80 @@ class gpuManager {
 		});
 	}
 
-	pidUsage(pids) {
+	async enumerateGPUs() {
+		this.GPUs=[];
+		logger.log(LOG_LEVEL_DEVELOPMENT, `Enumerating GPUs..`);
+		let entries = fs.readdirSync(`/sys/class/drm`);
+
+		entries = entries.filter((entry) => (entry.substr(0,4) == 'card' && entry.length == 5) ? true : false);
+
+		for (let card of entries) {
+			let gpu = card.substr(4,1);
+
+			let fullpcidevice = await this.getFullPCIDevice(gpu);
+			let almostfullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-11);
+			fullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-9);
+			let pcidevice = fullpcidevice.substr(-7,7);
+
+			let vendorid = await this.getPCIVendorID(gpu);
+			let deviceid = await this.getPCIDeviceID(gpu);
+
+			let subvendorid = await this.getPCISubVendorID(gpu);
+			let subdeviceid = await this.getPCISubDeviceID(gpu);
+
+			let vendorName = 'unknown';
+			let productName = 'unknown';
+
+			let hwmon = 'unknown';
+			let nv = 'unknown';
+
+			switch(vendorid) {
+				case `1002`: 
+					hwmon = await this.getHWMon(gpu);
+					vendorName = 'amd';
+					productName = this.getAMDProductName(deviceid);
+				  break;
+				case `10DE`:
+					vendorName = 'nvidia';
+					let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);
+					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
+					productName = nv.nvidia_smi_log.gpu.product_name;
+				  break;
+				case `8086`:
+					vendorName = 'intel';
+				  break;
+			}
+
+			logger.log(LOG_LEVEL_VERBOSE, `Found GPU${gpu} from ${vendorName} (${vendorid}:${deviceid})`);
+
+			let GPU = {
+				gpu: gpu,
+				card: card,
+				fullpcidevice: fullpcidevice,
+				almostfullpcidevice: almostfullpcidevice,
+				pcidevice: pcidevice,
+				vendorid: vendorid,
+				vendorName: vendorName,
+				productName: productName,
+				subvendorid: subvendorid,
+				subdeviceid: subdeviceid,
+				deviceid: deviceid
+			};
+
+			(hwmon != 'unknown')? GPU.hwmon = hwmon:null;
+			(nv    != 'unknown')? GPU.nv    = nv   :null;
+			
+			this.GPUs.push(GPU);
+		};
+	}
+
+	getPIDUsage(pids) {
 		return new Promise((resolve,reject) => {
 			pidusage(pids, function(err,stats) {
 				if (err) reject(err);
 				resolve(stats);
 			});
 		});
-	}
-
-	async stopDaemon() {
-		this.webHandler.stopListening();
-		
-		clearInterval(this.daemonInterval);
-
-		await logger.log(`${$me} ${$version} daemon shutting down.`);
 	}
 
 	queryOOB(pid) {
@@ -656,34 +794,12 @@ class gpuManager {
 		switch (process.argv[3]) {
 			case 'manual':
 			case 'enable':
-				switch (gpu) {
-					case 'all': case 'nvidia': case 'amd': case 'intel':
-						for (let cgpu of this.GPUs)
-							(gpu == 'all')
-							? await this.setGPUFanMode(cgpu.gpu, 'manual')
-							: (cgpu.vendorName == gpu)
-								? await this.setGPUFanMode(cgpu.gpu, 'manual') : null;
-					  break;
-					default:
-						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
-						await this.setGPUFanMode(gpu, 'manual');
-				}
+				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'manual'); });
 			  break;
 			case 'auto':
 			case 'automatic':
 			case 'disable':
-				switch (gpu) {
-					case 'all': case 'nvidia': case 'amd': case 'intel':
-							for (let cgpu of this.GPUs)
-								(gpu == 'all')
-								? await this.setGPUFanMode(cgpu.gpu, 'automatic')
-								: (cgpu.vendorName == gpu)
-									? await this.setGPUFanMode(cgpu.gpu, 'automatic') : null;
-						  break;					
-					default:
-						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
-						await this.setGPUFanMode(gpu, 'automatic');
-				}
+				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'automatic'); });
 			  break;
 			case 'curve':
 				/*::TODO::*/
@@ -692,19 +808,7 @@ class gpuManager {
 			default:
 				let speed = process.argv[3];
 				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
-				switch (gpu) {
-					case 'all': case 'nvidia': case 'amd': case 'intel':
-						for (let cgpu of this.GPUs)
-							(gpu == 'all')
-							? await this.setGPUFanSpeed(cgpu.gpu)
-							: (cgpu.vendorName == gpu)
-								? await this.setGPUFanSpeed(cgpu.gpu) : null;
-					  break;					
-					default:
-						gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
-
-					  	await this.setGPUFanSpeed(gpu, speed);
-				}			
+				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanSpeed(cgpu, speed); });
 		}
 	}
 
@@ -718,18 +822,7 @@ class gpuManager {
 		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
 		
 		if (power == "reset") {
-			switch (gpu) {
-				case 'all': case 'nvidia': case 'amd': case 'intel':
-					for (let cgpu of this.GPUs)
-						(gpu == 'all')
-						? await this.resetGPUPower(cgpu.gpu)
-						: (cgpu.vendorName == gpu)
-							? await this.resetGPUPower(cgpu.gpu) : null;
-				  break;
-				default:
-					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
-					await this.resetGPUPower(gpu);
-			}
+			this.handleGPUArgument(gpu, this.resetGPUPower.bind(this));
 		} else {
 			if (!Number.isInteger(parseInt(power))) {
 				logger.log(`Invalid power value: ${power}`);
@@ -738,131 +831,20 @@ class gpuManager {
 				power=parseInt(power);
 			}
 
-			switch (gpu) {
-				case 'all': case 'nvidia': case 'amd': case 'intel':
-					for (let cgpu of this.GPUs)
-						(gpu == 'all')
-						? await this.setGPUPower(cgpu.gpu, power)
-						: (cgpu.vendorName == gpu)
-							? await this.setGPUPower(cgpu.gpu, power) : null;
-				  break;
-				default:
-					gpu = (Number.isInteger(parseInt(gpu))) ? gpu : 0;
-					await this.setGPUPower(gpu, power);
-			}
+			await this.handleGPUArgument(gpu, async(cgpu) => {
+				this.setGPUPower(cgpu, power);
+			});
 		}
 	}
 
-	async handleListGPUs() {
-		let gpu = process.argv[3];
-		switch (gpu) {
-			case 'all': case 'nvidia': case 'amd': case 'intel':
-				for (let cgpu of this.GPUs)
-					(gpu == 'all')
-					? await this.listGPU(cgpu.gpu)
-					: (cgpu.vendorName == gpu)
-						? await this.listGPU(cgpu.gpu)
-						: null;
-			  break;
-			default:
-				if (Number.isInteger(parseInt(process.argv[3]))) {
-					gpu = process.argv[3];
-					await this.listGPU(gpu);
-				} else {
-					for (gpu of this.GPUs) await this.listGPU(gpu.gpu);
-				}
-		}		
-	}
+	async handleListGPUs() { await this.handleGPUArgument(process.argv[3], this.listGPU.bind(this)); }
+	async handleShowStatus() { await this.handleGPUArgument(process.argv[3], this.showStatus.bind(this)); }
 
-	async handleShowStatus() {
-		let gpu = process.argv[3];
-		switch (gpu) {
-			case 'all': case 'nvidia': case 'amd': case 'intel':
-				for (let cgpu of this.GPUs)
-					(gpu == 'all')
-					? await this.showStatus(cgpu.gpu)
-					: (cgpu.vendorName == gpu)
-						? await this.showStatus(cgpu.gpu)
-						: null;
-			  break;
-			default:
-				gpu = (Number.isInteger(parseInt(gpu))) ? process.argv[3] : 0;
-				if (typeof this.GPUs[gpu] === 'undefined')
-					if (typeof this.GPUs[0] === 'undefined') {
-						logger.log(`GPU${gpu} not found - no GPU0 to fallback to.`);
-						process.exit(1);
-					} else {
-						logger.log(`GPU${gpu} not found - defaulting to GPU0.`);
-						gpu = 0;
-					}
-				await this.showStatus(gpu);
-		}
-	}
+	getAMDProductName(deviceId) {
+		let amdgpu_ids = require('./amdgpu_ids.js')();
 
-	async enumerateGPUs() {
-		this.GPUs=[];
-		logger.log(LOG_LEVEL_DEVELOPMENT, `Enumerating GPUs..`);
-		let entries = fs.readdirSync(`/sys/class/drm`);
-
-		entries = entries.filter((entry) => (entry.substr(0,4) == 'card' && entry.length == 5) ? true : false);
-
-		for (let card of entries) {
-			let gpu = card.substr(4,1);
-
-			let fullpcidevice = await this.getFullPCIDevice(gpu);
-			let almostfullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-11);
-			fullpcidevice = fullpcidevice.substr(9,fullpcidevice.length-9);
-			let pcidevice = fullpcidevice.substr(-7,7);
-
-			let vendorid = await this.getPCIVendorID(gpu);
-			let deviceid = await this.getPCIDeviceID(gpu);
-
-			let subvendorid = await this.getPCISubVendorID(gpu);
-			let subdeviceid = await this.getPCISubDeviceID(gpu);
-
-			let vendorName = 'unknown';
-			let productName = 'unknown';
-
-			let hwmon = 'unknown';
-			let nv = 'unknown';
-
-			switch(vendorid) {
-				case `1002`: 
-					hwmon = await this.getHWMon(gpu);
-					vendorName = 'amd';
-				  break;
-				case `10de`:
-					vendorName = 'nvidia';
-					let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);
-					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
-					productName = nv.nvidia_smi_log.gpu.product_name;
-				  break;
-				case `8086`:
-					vendorName = 'intel';
-				  break;
-			}
-
-			logger.log(LOG_LEVEL_VERBOSE, `Found GPU${gpu} from ${vendorName} (${vendorid}:${deviceid})`);
-
-			let GPU = {
-				gpu: gpu,
-				card: card,
-				fullpcidevice: fullpcidevice,
-				almostfullpcidevice: almostfullpcidevice,
-				pcidevice: pcidevice,
-				vendorid: vendorid,
-				vendorName: vendorName,
-				productName: productName,
-				subvendorid: subvendorid,
-				subdeviceid: subdeviceid,
-				deviceid: deviceid
-			};
-
-			(hwmon != 'unknown')? GPU.hwmon = hwmon:null;
-			(nv    != 'unknown')? GPU.nv    = nv   :null;
-			
-			this.GPUs.push(GPU);
-		};
+		//*::TODO:: also match revision? update ids from local driver or online?
+		return amdgpu_ids.ids[deviceId].productName.replace(`AMD `, ``);
 	}
 
 	async updateNV(gpu) {
@@ -874,11 +856,11 @@ class gpuManager {
 	async getHWMon(gpu) { return (fs.readdirSync(`/sys/class/drm/card${gpu}/device/hwmon`))[0]; }
 
 	async getIRQNumber(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/irq`, `utf8`)).trim(); }
-	async getFullPCIDevice(gpu) { return (fs.readlinkSync(`/sys/class/drm/card${gpu}/device`)); }
-	async getPCIVendorID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/vendor`, `utf8`)).trim().substr(2,4); }
-	async getPCIDeviceID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/device`, `utf8`)).trim().substr(2,4); }
-	async getPCISubVendorID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/subsystem_vendor`, `utf8`)).trim().substr(2,4); }
-	async getPCISubDeviceID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/subsystem_device`, `utf8`)).trim().substr(2,4); }
+	async getFullPCIDevice(gpu) { return (fs.readlinkSync(`/sys/class/drm/card${gpu}/device`)).toUpperCase() ; }
+	async getPCIVendorID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/vendor`, `utf8`)).trim().substr(2,4).toUpperCase(); }
+	async getPCIDeviceID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/device`, `utf8`)).trim().substr(2,4).toUpperCase(); }
+	async getPCISubVendorID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/subsystem_vendor`, `utf8`)).trim().substr(2,4).toUpperCase(); }
+	async getPCISubDeviceID(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/subsystem_device`, `utf8`)).trim().substr(2,4).toUpperCase(); }
 	async getPCILinkSpeed(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/current_link_speed`, `utf8`)).trim(); }
 	async getPCILinkWidth(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/current_link_width`, `utf8`)).trim(); }
 	async getPCIMaxLinkSpeed(gpu) { return (fs.readFileSync(`/sys/class/drm/card${gpu}/device/max_link_speed`, `utf8`)).trim(); }
@@ -1266,7 +1248,7 @@ class gpuManager {
 
 				try {
 					await logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
-					fs.writeFileSync(file, pwm);
+					await fsp.writeFile(file, pwm.toString());
 				} catch (e) {
 					await logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
 					switch (e.code) {
@@ -1298,7 +1280,7 @@ class gpuManager {
 				switch(mode) {
 					case 'manual':
 						try {
-							fs.writeFileSync(file, `1`);
+							fsp.writeFile(file, `1`);
 						} catch (e) {
 							await logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
 							switch (e.code) {
@@ -1317,7 +1299,7 @@ class gpuManager {
 					case 'automatic':
 					default:
 						try {
-							fs.writeFileSync(file, `2`);
+							fsp.writeFile(file, `2`);
 						} catch (e) {
 							await logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
 							switch (e.code) {
@@ -1349,7 +1331,7 @@ class gpuManager {
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
 					await logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
-					fs.writeFileSync(file, 0);
+					fsp.writeFile(file, `0`);
 				} catch (e) {
 					await logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
@@ -1397,8 +1379,17 @@ class gpuManager {
 		let max = await this.getPowerLimitMaxWatts(gpu);
 		let min = await this.getPowerLimitMinWatts(gpu);
 
-		if (process.getuid() != 0) {
-			await logger.log(`root is required to set values`);
+		if (
+			(this.GPUs[gpu].vendorName == "amd"
+		|| this.GPUs[gpu].vendorName == "nvidia")
+		&& process.getuid() != 0) {
+			//*::DEVELOPMENT::*::TODO:: - root not required for nvidia-settings and is probably not wanted!
+			//*::DEVELOPMENT::*::TODO:: - nvidia-settings requires the user from which X is run's permissions..?
+			//*::DEVELOPMENT::*::TODO:: - however! it is required to use nvidia-smi to set values! confusing eh?
+			//*::DEVELOPMENT::*::TODO:: - it is required for amd sysfs, but, libdrm for amdgpu might be better
+			//*::DEVELOPMENT::*::TODO:: - for cmd line stuff, I suppose we could drop to sudo only w/needed
+			//*::DEVELOPMENT::*::TODO:: - but what about when on gui> ?? prefer to not run as root ..
+			await logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
 			process.exit(1);
 		}
 		
@@ -1413,7 +1404,7 @@ class gpuManager {
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
 					await logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
-					fs.writeFileSync(file, power * 1000 * 1000);
+					await fsp.writeFile(file, (power * 1000 * 1000).toString());
 				} catch (e) {
 					await logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
@@ -1455,6 +1446,9 @@ class gpuManager {
 				// version but I'd rather display the 'well-known' version that people
 				// will understand and know and correlate to the actual driver they 
 				// installed.
+				//
+				// also, this file doesn't seem to exist with the 'linux amdgpu' driver, only the real amd driver..
+
 				let [a,b,c,d,e] = ver.split('.');
 				ver = `${d}.${e}`;
 			  break;
@@ -1462,6 +1456,7 @@ class gpuManager {
 				ver = this.GPUs[gpu].nv.nvidia_smi_log.driver_version;
 			  break;
 		}
+
 		return ver;
 	}
 
@@ -1479,193 +1474,224 @@ class gpuManager {
 	}	
 
 	async getGPUStatus(gpu) {
-		this.GPUs[gpu].IRQ = await this.getIRQNumber(gpu);
-		
-		this.GPUs[gpu].pcilinkspeed = await this.getPCILinkSpeed(gpu);
-		this.GPUs[gpu].pcilinkwidth = await this.getPCILinkWidth(gpu);
-		
-		this.GPUs[gpu].maxpcilinkspeed = await this.getPCIMaxLinkSpeed(gpu);
-		this.GPUs[gpu].maxpcilinkwidth = await this.getPCIMaxLinkWidth(gpu);
-		
-		this.GPUs[gpu].gpu_busy = await this.getGPUBusy(gpu);
-		this.GPUs[gpu].mem_busy = await this.getMemBusy(gpu);
-		
-		this.GPUs[gpu].memUsed = await this.getMemUsed(gpu);
-		this.GPUs[gpu].memTotal = await this.getMemTotal(gpu);
+		try {
+			this.GPUs[gpu].IRQ = await this.getIRQNumber(gpu);
+			
+			this.GPUs[gpu].pcilinkspeed = await this.getPCILinkSpeed(gpu);
+			this.GPUs[gpu].pcilinkwidth = await this.getPCILinkWidth(gpu);
+			
+			this.GPUs[gpu].maxpcilinkspeed = await this.getPCIMaxLinkSpeed(gpu);
+			this.GPUs[gpu].maxpcilinkwidth = await this.getPCIMaxLinkWidth(gpu);
+			
+			this.GPUs[gpu].gpu_busy = await this.getGPUBusy(gpu);
+			this.GPUs[gpu].mem_busy = await this.getMemBusy(gpu);
+			
+			this.GPUs[gpu].memUsed = await this.getMemUsed(gpu);
+			this.GPUs[gpu].memTotal = await this.getMemTotal(gpu);
 
-		this.GPUs[gpu].memFree =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				this.GPUs[gpu].memTotal - this.GPUs[gpu].memUsed : 'unknown';
+			this.GPUs[gpu].memFree =
+				(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
+					this.GPUs[gpu].memTotal - this.GPUs[gpu].memUsed : 'unknown';
 
-		this.GPUs[gpu].memUsedMB =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memUsed/1000/1000).toFixed(1) : 'unknown';
+			this.GPUs[gpu].memUsedMB =
+				(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
+					(this.GPUs[gpu].memUsed/1000/1000).toFixed(1) : 'unknown';
 
-		this.GPUs[gpu].memFreeMB =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memFree/1000/1000).toFixed(1) : 'unknown';
+			this.GPUs[gpu].memFreeMB =
+				(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
+					(this.GPUs[gpu].memFree/1000/1000).toFixed(1) : 'unknown';
 
-		this.GPUs[gpu].memTotalMB =
-			(this.GPUs[gpu].memTotal != 'unknown') ?
-				(this.GPUs[gpu].memTotal/1000/1000).toFixed(1) : 'unknown';
-		
-		this.GPUs[gpu].memUsedPercent =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100).toFixed(2) : 'unknown';
+			this.GPUs[gpu].memTotalMB =
+				(this.GPUs[gpu].memTotal != 'unknown') ?
+					(this.GPUs[gpu].memTotal/1000/1000).toFixed(1) : 'unknown';
+			
+			this.GPUs[gpu].memUsedPercent =
+				(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
+					((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100).toFixed(2) : 'unknown';
 
-		this.GPUs[gpu].memFreePercent =
-			(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
-				(100 - ((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100)).toFixed(2) : 'unknown';
+			this.GPUs[gpu].memFreePercent =
+				(this.GPUs[gpu].memUsed != 'unknown' && this.GPUs[gpu].memTotal != 'unknown') ?
+					(100 - ((this.GPUs[gpu].memUsed / this.GPUs[gpu].memTotal) * 100)).toFixed(2) : 'unknown';
 
-		this.GPUs[gpu].gpu_temperatureC = await this.getGPUCoreTemperature(gpu);
-		this.GPUs[gpu].gpu_temperatureF = (((9/5) * this.GPUs[gpu].gpu_temperatureC) + 32).toFixed(2);
+			this.GPUs[gpu].gpu_temperatureC = await this.getGPUCoreTemperature(gpu);
+			this.GPUs[gpu].gpu_temperatureF = (((9/5) * this.GPUs[gpu].gpu_temperatureC) + 32).toFixed(2);
 
-		this.GPUs[gpu].gpuClocks = await this.getGPUClocks(gpu);
-		this.GPUs[gpu].memoryClocks = await this.getMemoryClocks(gpu);
+			this.GPUs[gpu].gpuClocks = await this.getGPUClocks(gpu);
+			this.GPUs[gpu].memoryClocks = await this.getMemoryClocks(gpu);
 
-		this.GPUs[gpu].gpu_mhz = await this.getCurrentGPUClock(gpu);
-		this.GPUs[gpu].mem_mhz = await this.getCurrentMemoryClock(gpu);
+			this.GPUs[gpu].gpu_mhz = await this.getCurrentGPUClock(gpu);
+			this.GPUs[gpu].mem_mhz = await this.getCurrentMemoryClock(gpu);
 
-		this.GPUs[gpu].gpuProfileMhz = await this.getCurrentGPUClockProfile(gpu);
-		this.GPUs[gpu].memoryProfileMhz = await this.getCurrentMemoryClockProfile(gpu);
+			this.GPUs[gpu].gpuProfileMhz = await this.getCurrentGPUClockProfile(gpu);
+			this.GPUs[gpu].memoryProfileMhz = await this.getCurrentMemoryClockProfile(gpu);
 
-		this.GPUs[gpu].powerLimitWatts = await this.getPowerLimitWatts(gpu);
-		this.GPUs[gpu].powerLimitMinWatts = await this.getPowerLimitMinWatts(gpu);
-		this.GPUs[gpu].powerLimitMaxWatts = await this.getPowerLimitMaxWatts(gpu);
+			this.GPUs[gpu].powerLimitWatts = await this.getPowerLimitWatts(gpu);
+			this.GPUs[gpu].powerLimitMinWatts = await this.getPowerLimitMinWatts(gpu);
+			this.GPUs[gpu].powerLimitMaxWatts = await this.getPowerLimitMaxWatts(gpu);
 
-		this.GPUs[gpu].powerUsage = await this.getPowerUsage(gpu);
-		this.GPUs[gpu].powerUsageWatts = this.GPUs[gpu].powerUsage / 1000;
+			this.GPUs[gpu].powerUsage = await this.getPowerUsage(gpu);
+			this.GPUs[gpu].powerUsageWatts = this.GPUs[gpu].powerUsage / 1000;
 
-		this.GPUs[gpu].vddgfx = await this.getVddGfx(gpu);
+			this.GPUs[gpu].vddgfx = await this.getVddGfx(gpu);
 
-		this.GPUs[gpu].fan = await this.getFanInfo(gpu);
+			this.GPUs[gpu].fan = await this.getFanInfo(gpu);
 
-		this.GPUs[gpu].driver_version = await this.getDriverVersion(gpu);
-		this.GPUs[gpu].vbios_version = await this.getBIOSVersion(gpu);
+			try {
+				this.GPUs[gpu].driver_version = await this.getDriverVersion(gpu);
+			} catch (e) {
 
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				this.GPUs[gpu].gpuClocksPrintable = '';
-				for (let [id,clk] of this.GPUs[gpu].gpuClocks.entries()) {
-					let mhz = clk.mhz;
-					if (clk.active) this.GPUs[gpu].gpuClocksPrintable +=`${ansi.FgBrMagenta}[`;
-					this.GPUs[gpu].gpuClocksPrintable += mhz;
-					if (clk.active) {
-						this.GPUs[gpu].gpuClocksPrintable +=`]${ansi.FgBrCyan}`;
-						this.GPUs[gpu].gpuClockProfile = clk.id;
-					}
-					if (id < this.GPUs[gpu].gpuClocks.length-1) this.GPUs[gpu].gpuClocksPrintable += ", ";
+				switch (this.GPUs[gpu].vendorName) {
+					case 'amd':
+						logger.log(`Unable to query GPU driver version; you may be using a non-vendor driver. Some information and controls will not be available.`);
+						this.showGPUDriversMessage();
+						this.GPUs[gpu].driver_version="unknown";
+					 break; // apparently the more recent 'default' amdgpu kernel module can now do fans, temps, etc. also module is called the same as the official now that is confusing; default doesn't have a version though hence ...
+					case 'nvidia': // for nvidia, if we have noveau or nothing, we're kinda hooped for anything as there's no sysfs interface. //*::TODO:: find out what noveau can tell us? and if it has any controls? doubtful but...
+					case 'intel': //*::TODO:: intel release gpus one day?
+					default:
+						this.showGPUDriversMessage();
+					  process.exit(1);
 				}
+			}
 
-				this.GPUs[gpu].memoryClocksPrintable = '';
-				for (let [id,clk] of this.GPUs[gpu].memoryClocks.entries()) {
-					let mhz = clk.mhz;
-					if (clk.active) this.GPUs[gpu].memoryClocksPrintable +=`${ansi.FgBrMagenta}[`;
-					this.GPUs[gpu].memoryClocksPrintable += mhz;
-					if (clk.active) {
-						this.GPUs[gpu].memoryClocksPrintable +=`]${ansi.FgBrCyan}`;
-						this.GPUs[gpu].memoryClockProfile = clk.id;
+			this.GPUs[gpu].vbios_version = await this.getBIOSVersion(gpu);
+
+			switch (this.GPUs[gpu].vendorName) {
+				case 'amd':
+					this.GPUs[gpu].gpuClocksPrintable = '';
+					for (let [id,clk] of this.GPUs[gpu].gpuClocks.entries()) {
+						let mhz = clk.mhz;
+						if (clk.active) this.GPUs[gpu].gpuClocksPrintable +=`${ansi.FgBrMagenta}[`;
+						this.GPUs[gpu].gpuClocksPrintable += mhz;
+						if (clk.active) {
+							this.GPUs[gpu].gpuClocksPrintable +=`]${ansi.FgBrCyan}`;
+							this.GPUs[gpu].gpuClockProfile = clk.id;
+						}
+						if (id < this.GPUs[gpu].gpuClocks.length-1) this.GPUs[gpu].gpuClocksPrintable += ", ";
 					}
-					if (id < this.GPUs[gpu].memoryClocks.length-1) this.GPUs[gpu].memoryClocksPrintable += ", ";
-				}
-			  break;
-			case 'nvidia':
-				this.GPUs[gpu].deviceName = this.GPUs[gpu].nv.nvidia_smi_log.gpu.product_name;
-			  break;
+
+					this.GPUs[gpu].memoryClocksPrintable = '';
+					for (let [id,clk] of this.GPUs[gpu].memoryClocks.entries()) {
+						let mhz = clk.mhz;
+						if (clk.active) this.GPUs[gpu].memoryClocksPrintable +=`${ansi.FgBrMagenta}[`;
+						this.GPUs[gpu].memoryClocksPrintable += mhz;
+						if (clk.active) {
+							this.GPUs[gpu].memoryClocksPrintable +=`]${ansi.FgBrCyan}`;
+							this.GPUs[gpu].memoryClockProfile = clk.id;
+						}
+						if (id < this.GPUs[gpu].memoryClocks.length-1) this.GPUs[gpu].memoryClocksPrintable += ", ";
+					}
+				  break;
+			}
+		} catch (e) {
+			logger.log(`Error probing information for GPU${gpu}`);
+			logger.log(e);
+			this.showGPUDriversMessage();
+			process.exit(1);
 		}
 	}
 
+	showGPUDriversMessage() {
+		logger.log(`Please ensure your GPU drivers are correctly installed.`);
+		logger.log(`For this program to work properly, we need the vendor-specific drivers.`);
+		logger.log(`This means the drivers that Linux comes (ie. 'amdgpu', 'radeon' or 'noveau' packages included with many Linux distributions) with will not be appropriate - instead use the vendor packages (ie. 'amdgpu' or amdgpu-pro' from AMD, 'nvidia-drm' from NVIDIA) available from their websites.`);
+		logger.log(`Note: NVIDIA devices will require an instance of X11 running to control most card values. ${$me} can attempt to generate a working xorg.conf, see usage.`);
+	}
+
 	showUsage() {
+		const lightPipe = `${ansi.Bright}|${ansi.Reset}`;
 		const usageTemplate = 
 ///////////////////////////////////////////////////////////////////////////////
 // Usage CLI Template                                                        //
 ///////////////////////////////////////////////////////////////////////////////
-`${ansi.FgBrGreen}${$me} v${$version}     ${$copyright}       ${$license}${ansi.Reset}
+`${ansi.Bright+ansi.FgBrGreen}${$me} v${$version}     ${$copyright}       ${$license}${ansi.Reset}
 
-${$me} shows statistics and manipulates power limit settings for GPUs on
+${ansi.BBW+$me+ansi.Reset} shows statistics and manipulates power limit settings for GPUs on
 Linux through various interfaces provided by manufacturer's drivers, for
 example, using the sysfs interface to interact with the amdgpu driver.
 
-Most commands will execute the command and exit. For example, using
-'${$me} fan 50% 0' to set fan speed to 50% for GPU 0, gpumgr will simply
-set it once and exit.
+If you want ${ansi.BBW}fan speed monitoring${ansi.Reset} or ${ansi.BBW}curve control${ansi.Reset} or ${ansi.BBW}to use the web interface${ansi.Reset},
+you must ${ansi.Bright+ansi.FgBrCyan}start${ansi.Reset} the daemon. Once the daemon is running, you can manage settings
+for your GPUs at ${ansi.FgBrCyan}http://${this.serviceHost}:${this.servicePort}${ansi.Reset} - or on the host/port you specified.
 
-If you want fan speed monitoring or curve control or to use the web interface,
-you must start the daemon. Once the daemon is running, you can manage settings
-for your GPUs at http://${this.serviceHost}:${this.servicePort} - or on whatever port you specified.
+${ansi.BBW}Usage:${ansi.Reset}
 
-${ansi.FgBrWhite}Usage:${ansi.Reset}
+  ${ansi.BBW}${$me} [command] ${ansi.FgBrBlue}<gpu>${ansi.Reset} ${ansi.Bright+ansi.FgBrYellow}<options>${ansi.Reset}
 
-  ${$me} [command] ${ansi.FgBrBlue}<gpu>${ansi.Reset} <options>
+  If ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} is omitted from any command, ${ansi.BBW}GPU0${ansi.Reset} is assumed.
+  `//${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be a comma separated list of GPU numbers. //*::TODO:: uhh don't think I ever did this..fix
+  +`
+  ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.BBW}'all'${ansi.Reset} to affect ${ansi.BBW}ALL GPUs
+  ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.TeamRed}'amd'${ansi.Reset} to affect all ${ansi.TeamRed}AMD GPUs
+  ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.TeamGreen}'nvidia'${ansi.Reset} to affect all ${ansi.TeamGreen}Nvidia GPUs
+  ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.TeamBlue}'intel'${ansi.Reset} to affect all ${ansi.TeamBlue}Intel GPUs
 
-  If ${ansi.FgBrBlue}<gpu>${ansi.Reset} is omitted from any command, GPU0 is assumed.
+  ${ansi.BBW}Commands with no options or only GPU specified:${ansi.Reset}
 
-  ${ansi.FgBrBlue}<gpu>${ansi.Reset} can be a comma separated list of GPU numbers.
-  ${ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to 'all' to affect ALL GPUs
-  ${ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to 'amd' to affect all AMD GPUs
-  ${ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to 'nvidia' to affect all Nvidia GPUs
-  ${ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to 'intel' to affect all Intel GPUs
-
-  Commands with no options or only GPU specified:
-  (commands with a ${ansi.FgBrWhite}*${ansi.Reset} require ${ansi.FgBrWhite}${ansi.Underscore}root${ansi.Reset}!)
-
-    help | --help | -h       Display this help message
-    list ${ansi.FgBrBlue}<gpu>${ansi.Reset}               List available GPUs and their GPU#
-    show ${ansi.FgBrBlue}<gpu>${ansi.Reset}               Show detailed statistics for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    status ${ansi.FgBrBlue}<gpu>${ansi.Reset}             Same as above
-    power ${ansi.FgBrYellow}[percent] ${ansi.FgBrBlue}<gpu>${ansi.Reset}   ${ansi.FgBrWhite}*${ansi.Reset}Set ${ansi.FgBrBlue}<gpu>${ansi.Reset}'s power target to <percent>
-    power reset ${ansi.FgBrBlue}<gpu>${ansi.Reset}       ${ansi.FgBrWhite}*${ansi.Reset}Reset default power limit for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    recover ${ansi.FgBrBlue}<gpu>${ansi.Reset}           ${ansi.FgBrWhite}*${ansi.Reset}Try driver recovery mechanism for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    fan enable ${ansi.FgBrBlue}<gpu>${ansi.Reset}        ${ansi.FgBrWhite}*${ansi.Reset}Enable manual fan control for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    fan disable ${ansi.FgBrBlue}<gpu>${ansi.Reset}       ${ansi.FgBrWhite}*${ansi.Reset}Disable manual fan control for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    fan ${ansi.FgBrYellow}[percent] ${ansi.FgBrBlue}<gpu>${ansi.Reset}     *Set ${ansi.FgBrBlue}<gpu>${ansi.Reset}'s fan speed to <percent>
-    start ${ansi.FgBrYellow}<options>${ansi.Reset}          Starts the ${$me} service
+    help ${lightPipe} --help ${lightPipe} -h       Display this help message
+    list ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}               List available GPUs and their GPU#
+    show ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}               Show detailed statistics for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
+    status ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}             Same as above
+    power ${ansi.Bright+ansi.FgBrYellow}[percent] ${ansi.FgBrBlue}<gpu>${ansi.Reset}   ${ansi.BBW}*${ansi.Reset}Set ${ansi.FgBrBlue}<gpu>${ansi.Reset}'s power target to <percent>
+    power reset ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}       ${ansi.BBW}*${ansi.Reset}Reset default power limit for ${ansi.FgBrBlue}<gpu>${ansi.Reset}`
+    +//recover ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}           ${ansi.BBW}*${ansi.Reset}Try driver recovery mechanism for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
+    //*::TODO:: bleh didn't do that either
+    `
+    fan enable ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}        ${ansi.BBW}*${ansi.Reset}Enable manual fan control for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
+    fan disable ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}       ${ansi.BBW}*${ansi.Reset}Disable manual fan control for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
+    fan ${ansi.Bright+ansi.FgBrYellow}[percent] ${ansi.FgBrBlue}<gpu>${ansi.Reset}     ${ansi.BBW}*${ansi.Reset}Set ${ansi.FgBrBlue}<gpu>${ansi.Reset}'s fan speed to <percent>
+    ${ansi.Bright+ansi.FgBrCyan}start ${ansi.FgBrYellow}<options>${ansi.Reset}          Starts the ${$me} service
     restart                  Soft Restarts the ${$me} service
     stop                     Stops the ${$me} service
     force restart            Forcibly Restarts the ${$me} service
     force stop               Forcibly Kills the ${$me} service
-    force nv-headless ${ansi.FgBrBlue}<gpu>${ansi.Reset} ${ansi.FgBrWhite}*${ansi.Reset}Tries to create a valid xorg.conf
+    force nv-headless ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} ${ansi.BBW}*${ansi.Reset}Tries to create a valid xorg.conf
                              to run headless/minimal as X11 is
                              required to change NVIDIA settings,
                              automatically enables coolbits
-    force nv-coolbits ${ansi.FgBrGreen}<cb>${ansi.Reset}  ${ansi.FgBrWhite}*${ansi.Reset}Tries to enable coolbits in xorg.conf
-                             ${ansi.FgBrGreen}<cb>${ansi.Reset} is the coolbits value, defaults
+    force nv-coolbits ${ansi.Bright+ansi.FgBrGreen}<cb>${ansi.Reset}  ${ansi.BBW}*${ansi.Reset}Tries to enable coolbits in xorg.conf
+                             ${ansi.Bright+ansi.FgBrGreen}<cb>${ansi.Reset} is the coolbits value, defaults
                              to 28.
+ 
+  (commands with a ${ansi.BBW}*${ansi.Reset} currently require ${ansi.FgBrWhite + ansi.Bright + ansi.Underscore}root${ansi.Reset} for ${ansi.TeamRed + ansi.Underscore}AMD${ansi.Reset} GPUs, [use ${ansi.Bright+ansi.FgBrYellow}sudo${ansi.Reset}],
+  however, ${ansi.TeamGreen}NVIDIA${ansi.Reset} GPUs require ${$me} to be run as the same user as
+  the X11 instance the GPU is running on, which is usually just your
+  normal user account - this means ${ansi.BBW + ansi.Underscore}root${ansi.Reset}/${ansi.FgBrYellow}sudo${ansi.Reset} will ${ansi.FgBrWhite + ansi.Underscore}not${ansi.Reset} work for ${ansi.TeamGreen}NVIDIA${ansi.Reset}!)
 
-  Options for Commands with Options:
+  ${ansi.BBW}Options for Commands with Options:${ansi.Reset}
   
-    [any]                    Options for any command
+    ${ansi.FgBrYellow}[any]${ansi.Reset}                    ${ansi.BBW}Options for any command${ansi.Reset}
     
-      -g | --no-colors       Disable ANSI Color formatting (colors 
+      -g ${lightPipe} --no-colors       Disable ANSI Color formatting (colors 
                              are automatically disabled if terminal
                              is detected to not support color)
 
-    start                    Starts the ${$me} background service
+    ${ansi.Bright+ansi.FgBrCyan}start${ansi.Reset}                    ${ansi.BBW}Starts the ${$me} background service${ansi.Reset}
 
-      --port <number>        Set which IPv4 port to listen on for
+      --port ${ansi.FgBrYellow}<number>${ansi.Reset}        Set which IPv4 port to listen on for
                              HTTP requests (eg. 1969, default is ${this.servicePort})
 
-      --wsport <number>      Set which IPv4 port to listen on for
+      --wsport ${ansi.FgBrYellow}<number>${ansi.Reset}      Set which IPv4 port to listen on for
                              WebSocket requests (eg. 1970, default is
                              HTTP request port + 2, so the port would
                              default to ${this.servicePort+2} if --port is not set)
 
-      --host <ip>            Set which IPv4 host to listen on.
+      --host ${ansi.FgBrYellow}<ip>${ansi.Reset}            Set which IPv4 host to listen on.
                              (eg. 0.0.0.0 or 127.0.0.1, default is
                              ${this.serviceHost})
 
-      --threads <#>          Number of worker processes for web service
+      --threads ${ansi.FgBrYellow}<#>${ansi.Reset}          Number of worker processes for web service
                              (defaults to number of cores, up to 4, minimum
                              is 2 threads, maximum is cores×4 [eg. ${$cores}×4=${$cores*4}
                              for your system] or the hardcoded max of 16)
-Examples:
+${ansi.BBW}Examples:${ansi.Reset}
 
-  ${$me} show nvidia             Show status of all Nvidia GPUs
-  ${$me} list Intel              List all Intel GPU#s
-  sudo ${$me} fan enable 0       Enable manual fan control for GPU0
-  sudo ${$me} fan disable all    Enable auto fan control for all GPUs
-  sudo ${$me} fan 100% 0         Set GPU0 fan speed to 100%
-  sudo ${$me} start --port 4200  Starts the daemon & webapp on port 4200
+  ${$me} show nvidia          Show status of all Nvidia GPUs
+  ${$me} list Intel           List all Intel GPU#s
+  ${$me} start --port 4200    Starts the daemon & webapp on port 4200
+  ${$me} fan enable 0         Enable manual fan control for GPU0
+  ${$me} fan disable all      Enable auto fan control for all GPUs
+  ${$me} fan 100% 0           Set GPU0 fan speed to 100%
 `;
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1747,7 +1773,7 @@ ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrRed} VBIOS Version: ${ansi.FgYellow}${this.GP
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} PCIe Device Bus Address: ${ansi.FgYellow}${this.GPUs[gpu].pcidevice}${ansi.FgBrBlue} @ ${ansi.FgYellow}IRQ ${this.GPUs[gpu].IRQ}
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Link Speed is ${ansi.FgBrGreen}${this.GPUs[gpu].pcilinkwidth}x [${this.GPUs[gpu].pcilinkspeed}] ${ansi.FgBrBlue}(Maximum is ${ansi.FgBrGreen}${this.GPUs[gpu].maxpcilinkwidth}x [${this.GPUs[gpu].maxpcilinkspeed}]${ansi.FgBrBlue})
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Vendor ID: ${teamColor}0x${this.GPUs[gpu].vendorid} / ${vendorColored} 
-${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Device ID: ${teamColor}0x${this.GPUs[gpu].deviceid} / ${this.GPUs[gpu].deviceName}
+${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Device ID: ${teamColor}0x${this.GPUs[gpu].deviceid} / ${this.GPUs[gpu].productName}
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Sub-Vendor ID: ${teamColor}0x${this.GPUs[gpu].subvendorid} / ${this.GPUs[gpu].subvendorname}
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Sub-Device ID: ${teamColor}0x${this.GPUs[gpu].subdeviceid} / ${this.GPUs[gpu].subdevicename}
 ${ansi.FgCyan}GPU${gpu}:${ansi.FgBrBlue} Current ${ansi.FgBrGreen}GPU Usage${ansi.FgBrBlue} is ${ansi.FgBrCyan}${this.GPUs[gpu].gpu_busy}%

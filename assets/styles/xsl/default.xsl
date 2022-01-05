@@ -117,7 +117,16 @@
 							<xsl:for-each select="GPUs/*">
 								<tr>
 									<td><xsl:value-of select="gpu/@gpu" /></td>
-									<td><xsl:value-of select="gpu/@vendorName" /></td>
+									<td>
+										<xsl:choose>
+											<xsl:when test="gpu/@vendorName != 'unknown'">
+												<img class="vendorLogo" src="/img/vendor/{gpu/@vendorName}-logo-sq.png" />
+											</xsl:when>
+											<xsl:otherwise>
+												<xsl:value-of select="gpu/@vendorName" />
+											</xsl:otherwise>
+										</xsl:choose>
+									</td>
 									<td><xsl:value-of select="gpu/@pcidevice" /></td>
 									<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
 									<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>

@@ -169,12 +169,23 @@ main table.gpuTable {
 	width: 100%;
 }
 
+main table.gpuTable img.vendorLogo {
+	width: 96px;
+}
+
+main table.gpuTable img.productTypeImage {
+	width: 96px;
+}
 main table.gpuTable tr td:first-child {
 	text-align: center;
 }
 
 main table.gpuTable td {
 	padding: 0.5em;
+}
+
+main table.gpuTable td.vendor {
+	text-align: center;
 }
 
 main table.gpuTable thead tr {
