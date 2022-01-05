@@ -58,7 +58,7 @@ class gpuManager {
 
 		/*::DEVELOPMENT::*/this.developmentMode = true;
 
-		if (this?.developmentMode) logger.setCurrentLogLevel(64);
+		if (this?.developmentMode) logger.setCurrentLogLevel(8);
 
 		this.handleArgumentsEarly();
 		this.handleArguments();

@@ -50,9 +50,22 @@ class gpumgrUI {
 	}
 
 	loadReactComponents() {
-		let GPUTable = new GPUTableFactory();
 
-		ReactDOM.render(GPUTable.componentFactory(), document.getElementById('card-GPUTable'));
+		let ReactMainComponent = ReactDOM.render(
+			React.createElement(MainComponent), 
+			document.getElementById('mainContentArea')
+		);
+
+		ReactMainComponent.addChild({
+			componentName: 'CardWrapper'
+		});
+
+		ReactMainComponent.state.children[0].ref.current.addChild({
+			componentName: 'Card'
+		})
+
+	    menu_dashboard.addEventListener('click', (ev)=>{
+	    });
 	}
 }
 

@@ -52,12 +52,13 @@
 	<script type="text/javascript" src="js/react/react.production.min.js"></script>
 	<script type="text/javascript" src="js/react/react-dom.production.min.js"></script> -->
 
-	<script type="text/javascript" src="js/GPUTable.jsx"></script>
 	<script type="text/javascript">var _data = `<xsl:value-of select="$data" />`;</script>
 	<script type="text/javascript">var _stats = `<xsl:value-of select="$stats" />`;</script>
 	<script type="text/javascript">var _servicePort = `<xsl:value-of select="$servicePort" />`;</script>
 	<script type="text/javascript">var _serviceHost = `<xsl:value-of select="$serviceHost" />`;</script>
 
+	<script type="text/javascript" src="js/GPUTable.jsx"></script>
+	
 	<script type="text/javascript" src="js/sortable/sortable.js"></script>
 
 	<script type="text/javascript" src="js/webSocketHandler.js"></script>
@@ -96,7 +97,7 @@
 		<li id="menu_preferences">Preferences</li>
 	</menu>
 </nav>
-<main>
+<main id="mainContentArea">
 	<div class="cardWrapper">
 		<div class="card wide" id="card-GPUTable">
 			<xsl:choose>
@@ -144,7 +145,6 @@
 			</xsl:choose>
 		</div>
 	</div>
-	<div id="reactRoot" />
 </main>
 <footer>
 	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr.js</a>&#0160;v<xsl:value-of select="$version" />&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>
