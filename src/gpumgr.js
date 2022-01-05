@@ -58,7 +58,7 @@ class gpuManager {
 
 		/*::DEVELOPMENT::*/this.developmentMode = true;
 
-		if (this?.developmentMode) logger.setCurrentLogLevel(8);
+		if (this?.developmentMode) logger.setCurrentLogLevel(64);
 
 		this.handleArgumentsEarly();
 		this.handleArguments();
@@ -133,7 +133,7 @@ class gpuManager {
 
 							if (typeof process.argv[4] !== 'undefined'
 							&& !Number.isInteger(parseInt(process.argv[4]))) {
-								await logger.log(`Invalid parameter: ${process.argv[4]}`);
+								logger.log(`Invalid parameter: ${process.argv[4]}`);
 								process.exit(1);
 							}
 
@@ -141,26 +141,26 @@ class gpuManager {
 
 							if (this.GPUs[gpu].vendorName != 'nvidia') {
 								(Number.isInteger(parseInt(process.argv[4])))
-									? await logger.log(`Error: GPU${gpu} is '${this.GPUs[gpu].vendorName}' not 'nvidia'`):null;
+									? logger.log(`Error: GPU${gpu} is '${this.GPUs[gpu].vendorName}' not 'nvidia'`):null;
 
-								await logger.log(`Searching for first NVIDIA GPU...`);
+								logger.log(`Searching for first NVIDIA GPU...`);
 								gpu = -1;
 
 								for (let cgpu of this.GPUs) {
 									if (cgpu.vendorName == 'nvidia') {
 										gpu = cgpu.gpu;
-										await logger.log(`First 'nvidia' GPU found at GPU${gpu}!`);
+										logger.log(`First 'nvidia' GPU found at GPU${gpu}!`);
 										break;
 									}
 								}							
 							}
 
 							if (gpu == -1) {
-								await logger.log(`No NVIDIA GPUs found! Aborting!!`);
+								logger.log(`No NVIDIA GPUs found! Aborting!!`);
 								process.exit(1);
 							}
 
-							await logger.log(`Attempting to use 'nvidia-xconfig' create headless /etc/X11/xorg.conf using GPU${gpu}`);
+							logger.log(`Attempting to use 'nvidia-xconfig' create headless /etc/X11/xorg.conf using GPU${gpu}`);
 
 							let [pciBusId, deviceIdFunction] = this.GPUs[gpu].pcidevice.split(`:`);
 							let [deviceId, deviceFunction] = deviceIdFunction.split(`.`);
@@ -169,16 +169,16 @@ class gpuManager {
 
 							let result = await exec(`nvidia-xconfig -a --cool-bits=28 --allow-empty-initial-configuration --busid=${busid}`);
 
-							await logger.log(`Success creating xorg.conf!`);
+							logger.log(`Success creating xorg.conf!`);
 							/*::TODO:: if we want to start an x session too?
 								should we also setup auto login? do we need login even ? if not setup we should meniton required
 							export DISPLAY=:0
 							startx -- $DISPLAY &
 							sleep 5*/
-							await logger.log(LOG_LEVEL_DEVELOPMENT, `${result.stdout}`);
+							logger.log(LOG_LEVEL_DEVELOPMENT, `${result.stdout}`);
 						} catch (e) {
-							await logger.log(`Failed creating xorg.conf!`);							
-							await logger.log(`${e.stderr.trim()}`);
+							logger.log(`Failed creating xorg.conf!`);							
+							logger.log(`${e.stderr.trim()}`);
 							process.exit(1);
 						}
 					  break;
@@ -186,21 +186,21 @@ class gpuManager {
 					case 'nv-coolbits':
 						if (typeof process.argv[4] !== 'undefined'
 						&& !Number.isInteger(parseInt(process.argv[4]))) {
-							await logger.log(`Invalid parameter: ${process.argv[4]}`);
+							logger.log(`Invalid parameter: ${process.argv[4]}`);
 							process.exit(1);
 						}
 
 						let coolbits = (Number.isInteger(parseInt(process.argv[4]))) ? parseInt(process.argv[4]) : 28;
 
-						await logger.log(`Attempting to set coolbits to ${coolbits}..`);
+						logger.log(`Attempting to set coolbits to ${coolbits}..`);
 
 						try {
 							let result = await exec(`nvidia-xconfig --cool-bits=${coolbits}`);
-							await logger.log(`Success setting coolbits tp ${coolbits}.`);
-							await logger.log(LOG_LEVEL_DEVELOPMENT, `${result.stdout}`);
+							logger.log(`Success setting coolbits tp ${coolbits}.`);
+							logger.log(LOG_LEVEL_DEVELOPMENT, `${result.stdout}`);
 						} catch (e) {
-							await logger.log(`Failed setting coolbits!`);
-							await logger.log(`${e.stderr.trim()}`);
+							logger.log(`Failed setting coolbits!`);
+							logger.log(`${e.stderr.trim()}`);
 							process.exit(1);
 						}
 					  break;
@@ -208,24 +208,24 @@ class gpuManager {
 						try {//*::TODO:: Figure out a way to save options (host/port/threads) on a force restart? or at very least (or both) allow to set options on force restart.
 							//*::TODO:: almost done, took all fucking night. stupid undocumented shit.
 							let pid = await this.getChildPID();
-							await logger.log(`${$me} attempting to query child [${pid}]`);
+							logger.log(`${$me} attempting to query child [${pid}]`);
 
 							try {
 								await this.queryOOB(pid);
 							} catch (e) {
-								await logger.log(`${$me} pingback failed, process will be killed. start it again manually. [${pid}]`);
+								logger.log(`${$me} pingback failed, process will be killed. start it again manually. [${pid}]`);
 								await this.killPID(pid);
-								await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+								logger.log(`${$me} sent signal to stop daemon [${pid}]`);
 								process.exit();
 							}
 
-							await logger.log(`${$me} attempting to stop daemon [${pid}]`);
+							logger.log(`${$me} attempting to stop daemon [${pid}]`);
 							await this.killPID(pid);
-							await logger.log(`${$me} attempting to start new daemon...`);
+							logger.log(`${$me} attempting to start new daemon...`);
 							await this.forkOff(true);
-							await logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
+							logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
 						} catch (e) {
-							await logger.log(`${$me} unable to find daemon`);
+							logger.log(`${$me} unable to find daemon`);
 						}
 						
 						process.exit();
@@ -233,12 +233,12 @@ class gpuManager {
 					case 'stop':
 						try {
 							let pid = await this.getChildPID();
-							await logger.log(`${$me} attempting to kill daemon [${pid}]`);
+							logger.log(`${$me} attempting to kill daemon [${pid}]`);
 							process.kill(pid, "SIGTERM");
-							await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+							logger.log(`${$me} sent signal to stop daemon [${pid}]`);
 							process.exit();
 						} catch (e) {
-							await logger.log(`${$me} unable to find daemon`);
+							logger.log(`${$me} unable to find daemon`);
 						}
 						
 						process.exit();
@@ -248,22 +248,22 @@ class gpuManager {
 			case 'restart':
 				try {
 					let pid = await this.getChildPID();
-					await logger.log(`${$me} attempting to restart daemon [${pid}]`);
+					logger.log(`${$me} attempting to restart daemon [${pid}]`);
 					await process.kill(pid, "SIGUSR2");
-					await logger.log(`${$me} sent signal to restart daemon [${pid}]`);
+					logger.log(`${$me} sent signal to restart daemon [${pid}]`);
 				} catch (e) {
-					await logger.log(`${$me} unable to find daemon`);
+					logger.log(`${$me} unable to find daemon`);
 				}
 			  break;
 			case 'stop':
 				try {
 					let pid = await this.getChildPID();
-					await logger.log(`${$me} attempting to stop daemon [${pid}]`);
+					logger.log(`${$me} attempting to stop daemon [${pid}]`);
 					process.kill(pid, "SIGINT");
-					await logger.log(`${$me} sent signal to stop daemon [${pid}]`);
+					logger.log(`${$me} sent signal to stop daemon [${pid}]`);
 					process.exit();
 				} catch (e) {
-					await logger.log(`${$me} unable to find daemon`);
+					logger.log(`${$me} unable to find daemon`);
 				}
 			  break;
 			case '__child':
@@ -563,7 +563,7 @@ class gpuManager {
 		
 		clearInterval(this.daemonInterval);
 
-		await logger.log(`${$me} ${$version} daemon shutting down.`);
+		logger.log(`${$me} ${$version} daemon shutting down.`);
 	}
 
 	updateWorker(worker) {
@@ -592,7 +592,6 @@ class gpuManager {
 				delete this.workerSubscriptions[msg.worker];
 			  break;
 		}
-
 	}
 
 	getSystemInfo() {
@@ -771,7 +770,7 @@ class gpuManager {
 				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
 				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)) : null;
 
-				await logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
+				logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 		}
 	}
 
@@ -803,7 +802,7 @@ class gpuManager {
 			  break;
 			case 'curve':
 				/*::TODO::*/
-				await logger.log(`fan curve mode not yet impemented`);
+				logger.log(`fan curve mode not yet impemented`);
 			  break;			
 			default:
 				let speed = process.argv[3];
@@ -1247,28 +1246,28 @@ class gpuManager {
 				let pwm = parseInt((speed / 100) * 255);
 
 				try {
-					await logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
+					logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
 					await fsp.writeFile(file, pwm.toString());
 				} catch (e) {
-					await logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
+					logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
 					switch (e.code) {
 						case "EACCES":
-							await logger.log(`--> Access was denied! root is required for most changing settings`);
+							logger.log(`--> Access was denied! root is required for most changing settings`);
 						  break;
 						case "ENOENT":
-							await logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
 						  break;
 						default:
-							await logger.log(`--> Some other error occured trying to write to [${file}]`);
+							logger.log(`--> Some other error occured trying to write to [${file}]`);
 					}
 				}
-				await logger.log(`[amd] Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
+				logger.log(`[amd] Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
 			  break;
 			case 'nvidia':
-				await logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
+				logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
 			  break;
 			case 'intel':
-				await logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
+				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
 			  break;
 		}
 	}
@@ -1282,45 +1281,45 @@ class gpuManager {
 						try {
 							fsp.writeFile(file, `1`);
 						} catch (e) {
-							await logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
+							logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
 							switch (e.code) {
 								case "EACCES":
-									await logger.log(`--> Access was denied! root is required for most changing settings`);
+									logger.log(`--> Access was denied! root is required for most changing settings`);
 								  break;
 								case "ENOENT":
-									await logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+									logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
 								  break;
 								default:
-									await logger.log(`--> Some other error occured trying to write to [${file}]`);
+									logger.log(`--> Some other error occured trying to write to [${file}]`);
 							}
 						}
-						await logger.log(`[amd] Fan mode for GPU${gpu} changed to: manual`);
+						logger.log(`[amd] Fan mode for GPU${gpu} changed to: manual`);
 					  break;
 					case 'automatic':
 					default:
 						try {
 							fsp.writeFile(file, `2`);
 						} catch (e) {
-							await logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
+							logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
 							switch (e.code) {
 								case "EACCES":
-									await logger.log(`--> Access was denied! root is required for most changing settings`);
+									logger.log(`--> Access was denied! root is required for most changing settings`);
 								  break;
 								case "ENOENT":
-									await logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+									logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
 								  break;
 								default:
-									await logger.log(`--> Some other error occured trying to write to [${file}]`);
+									logger.log(`--> Some other error occured trying to write to [${file}]`);
 							}
 						}
-						await logger.log(`[amd] Fan mode for GPU${gpu} changed to: automatic`);
+						logger.log(`[amd] Fan mode for GPU${gpu} changed to: automatic`);
 				}
 			  break;
 			case 'nvidia':
-				await logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
+				logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
 			  break;
 			case 'intel':
-				await logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
+				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
 			  break;
 		}
 	}
@@ -1330,23 +1329,23 @@ class gpuManager {
 			case 'amd':
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
-					await logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
+					logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
 					fsp.writeFile(file, `0`);
 				} catch (e) {
-					await logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
 						case "EACCES":
-							await logger.log(`--> Access was denied! root is required for most changing settings`);
+							logger.log(`--> Access was denied! root is required for most changing settings`);
 						  break;
 						case "ENOENT":
-							await logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
 						  break;
 						default:
-							await logger.log(`--> Some other error occured trying to write to [${file}]`);
+							logger.log(`--> Some other error occured trying to write to [${file}]`);
 					}
 				}
 				var power = await this.getPowerLimitWatts(gpu);
-				await logger.log(`[amd] Power limit set to default (${power} watts) for GPU${gpu}`);
+				logger.log(`[amd] Power limit set to default (${power} watts) for GPU${gpu}`);
 			  break;
 			case 'nvidia':
 				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
@@ -1354,23 +1353,23 @@ class gpuManager {
 				power = power.substr(0,power.length-2);
 
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					await logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
 					await exec(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
 					await this.updateNV(gpu);
 				}
 
 				await exec(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				await logger.log(`[nvidia] Power limit set to default (${power} watts) for GPU${gpu}`);
+				logger.log(`[nvidia] Power limit set to default (${power} watts) for GPU${gpu}`);
 				await this.updateNV(gpu);
 
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode == "Enabled") {
-					await logger.log(`[nvidia] persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
+					logger.log(`[nvidia] persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
 					await exec(`nvidia-smi -pm 0 --id=${fullpcidevice}`);
 				}
 
 			  break;
 			case 'intel':
-				await logger.log(`[intel] Intel power control not yet implemented, unable to reset GPU${gpu} power limit`);
+				logger.log(`[intel] Intel power control not yet implemented, unable to reset GPU${gpu} power limit`);
 			  break;
 		}		
 	}
@@ -1389,12 +1388,12 @@ class gpuManager {
 			//*::DEVELOPMENT::*::TODO:: - it is required for amd sysfs, but, libdrm for amdgpu might be better
 			//*::DEVELOPMENT::*::TODO:: - for cmd line stuff, I suppose we could drop to sudo only w/needed
 			//*::DEVELOPMENT::*::TODO:: - but what about when on gui> ?? prefer to not run as root ..
-			await logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
+			logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
 			process.exit(1);
 		}
 		
 		if (power > max || power < min) {
-			await logger.log(`Power limit ${power} is out of possible ranges for GPU${gpu}: ${min}-${max}`);
+			logger.log(`Power limit ${power} is out of possible ranges for GPU${gpu}: ${min}-${max}`);
 			process.exit(1);
 		}
 
@@ -1403,34 +1402,34 @@ class gpuManager {
 				if (power == 0) { power = 1; }
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
-					await logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
+					logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
 					await fsp.writeFile(file, (power * 1000 * 1000).toString());
 				} catch (e) {
-					await logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
 						case "EACCES":
-							await logger.log(`--> Access was denied! root is required for most changing settings`);
+							logger.log(`--> Access was denied! root is required for most changing settings`);
 						  break;
 						case "ENOENT":
-							await logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
 						  break;
 						default:
-							await logger.log(`--> Some other error occured trying to write to [${file}]`);
+							logger.log(`--> Some other error occured trying to write to [${file}]`);
 					}
 				}
-				await logger.log(`[amd] Power limit set to ${power} watts for GPU${gpu}`);
+				logger.log(`[amd] Power limit set to ${power} watts for GPU${gpu}`);
 			  break;
 			case 'nvidia':
 				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					await logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
 					await exec(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
 				}
 				await exec(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				await logger.log(`[nvidia] Power limit set to ${power} watts for GPU${gpu}`);
+				logger.log(`[nvidia] Power limit set to ${power} watts for GPU${gpu}`);
 			  break;
 			case 'intel':
-				await logger.log(`[intel] Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`);
+				logger.log(`[intel] Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`);
 			  break;
 		}
 	}

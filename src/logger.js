@@ -25,6 +25,7 @@ class logger {
 		this.#hrStart = process.hrtime.bigint();
 		this.logStore = [];
 		this.stdout = true;
+		this._logSync = false;
 		
 		this.#currentLogLevel = 4; // current log level is the level we check against to decide whether to show the message
 		this.#defaultLogLevel = 2; // default log level is the level we push to log at when a level isn't passed to log/push
@@ -46,10 +47,27 @@ class logger {
 	}
 
 	writeToFile(message) {
-		fs.appendFileSync(this.#parent.logFile, message + '\n');
+		if (this._logSync)
+			fs.appendFileSync(this.#parent.logFile, message + '\n');
+		else
+			fsp.appendFile(this.#parent.logFile, message + '\n');
 	}
 
-	log() {
+	logSync() {
+		this._logSync=true;
+		this._log(...arguments);
+	}
+
+	async logAsync() {
+		this._logSync=false;
+		this._log(...arguments);
+	}
+
+	async log() {
+		this._log(...arguments);
+	}
+
+	_log() {
         let messageLogLevel = this.#defaultLogLevel;
         let message=``;
 
