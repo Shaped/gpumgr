@@ -39,7 +39,7 @@ class CardWrapper extends React.Component {
 			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i}));
 		});
 		return (
-			<div id="poo" className="cardWrapper">
+			<div className="cardWrapper">
 				{children}
 			</div>
 			);

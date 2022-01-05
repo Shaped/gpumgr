@@ -50,7 +50,6 @@ class gpumgrUI {
 	}
 
 	loadReactComponents() {
-
 		let ReactMainComponent = ReactDOM.render(
 			React.createElement(MainComponent), 
 			document.getElementById('mainContentArea')
@@ -65,7 +64,7 @@ class gpumgrUI {
 		})
 
 	    menu_dashboard.addEventListener('click', (ev)=>{
-	    });
+	    }); 
 	}
 }
 
