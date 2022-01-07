@@ -22,7 +22,8 @@ const path = require('path');
 const os = require('os');
 const pidusage = require('pidusage');
 const performance = require('perf_hooks').performance;
-const exec = util.promisify(require('child_process').exec);
+const execPromise = util.promisify(require('child_process').exec);
+const exec = require('child_process').exec;
 
 global.$cores = os.cpus().length;
 global.$me = path.basename(process.argv[1]);
@@ -58,7 +59,7 @@ class gpuManager {
 
 		/*::DEVELOPMENT::*/this.developmentMode = true;
 
-		if (this?.developmentMode) logger.setCurrentLogLevel(8);
+		if (this?.developmentMode) logger.setCurrentLogLevel(64);
 
 		this.handleArgumentsEarly();
 		this.handleArguments();
@@ -102,10 +103,14 @@ class gpuManager {
 			case '-wtf'		:
 			case '--wtf'	:
 				global.ansi = require('./ansi.js')();
-				(process.stdout.getColorDepth() == 1
-				|| process.argv[process.argv.length-1] == '-g'
-				|| process.argv[process.argv.length-1] == '--no-colors')
-					? ansi.disableColor():null; }
+				(typeof process.stdout.getColorDepth === 'function')
+				?
+					(process.stdout.getColorDepth() == 1
+					|| process.argv[process.argv.length-1] == '-g'
+					|| process.argv[process.argv.length-1] == '--no-colors')
+						? ansi.disableColor():null
+				: ansi.disableColor();
+			}
 
 		switch (process.argv[2]) {
 			case '?'		:
@@ -167,7 +172,7 @@ class gpuManager {
 
 							let busid = `PCI:${parseInt(pciBusId)}:${parseInt(deviceId)}:${deviceFunction}`;
 
-							let result = await exec(`nvidia-xconfig -a --cool-bits=28 --allow-empty-initial-configuration --busid=${busid}`);
+							let result = await execPromise(`nvidia-xconfig -a --cool-bits=28 --allow-empty-initial-configuration --busid=${busid}`);
 
 							logger.log(`Success creating xorg.conf!`);
 							/*::TODO:: if we want to start an x session too?
@@ -195,7 +200,7 @@ class gpuManager {
 						logger.log(`Attempting to set coolbits to ${coolbits}..`);
 
 						try {
-							let result = await exec(`nvidia-xconfig --cool-bits=${coolbits}`);
+							let result = await execPromise(`nvidia-xconfig --cool-bits=${coolbits}`);
 							logger.log(`Success setting coolbits tp ${coolbits}.`);
 							logger.log(LOG_LEVEL_DEVELOPMENT, `${result.stdout}`);
 						} catch (e) {
@@ -666,6 +671,9 @@ class gpuManager {
 			let hwmon = 'unknown';
 			let nv = 'unknown';
 
+			let nvgpu = -1;
+			let nvx = -1;
+
 			switch(vendorid) {
 				case `1002`: 
 					hwmon = await this.getHWMon(gpu);
@@ -674,9 +682,11 @@ class gpuManager {
 				  break;
 				case `10DE`:
 					vendorName = 'nvidia';
-					let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);
-					nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
+					nv = await this.getNVSMIQuery(fullpcidevice);
 					productName = nv.nvidia_smi_log.gpu.product_name;
+					//[nvgpu, nvx] = await this.getNVGPUNumAndXDisplay(nv);
+					//let prix = await this.getPrimaryActiveXDisplay();
+					//if (nvx != prix) logger.log(`The detected primary X display DISPLAY:${prix} does not seem to be attached to GPU${gpu} - ${nv.nvidia_smi_log.gpu.uuid} - this could result in issues trying to interact with NVIDIA GPUs.`);
 				  break;
 				case `8086`:
 					vendorName = 'intel';
@@ -701,6 +711,8 @@ class gpuManager {
 
 			(hwmon != 'unknown')? GPU.hwmon = hwmon:null;
 			(nv    != 'unknown')? GPU.nv    = nv   :null;
+			(nvgpu != -1)		? GPU.nvgpu = nvgpu:null;
+			(nvx != -1)			? GPU.nvx   = nvx  :null;
 			
 			this.GPUs.push(GPU);
 		};
@@ -803,7 +815,7 @@ class gpuManager {
 			case 'curve':
 				/*::TODO::*/
 				logger.log(`fan curve mode not yet impemented`);
-			  break;			
+			  break;
 			default:
 				let speed = process.argv[3];
 				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
@@ -846,9 +858,63 @@ class gpuManager {
 		return amdgpu_ids.ids[deviceId].productName.replace(`AMD `, ``);
 	}
 
+	//*::TODO:: find a better way of correlating nv/x? if needed even?
+	//*::TODO:: must testing dual gpu with dual nv, and dual vendor with x working on all cases
+	//*::TODO:: also just write the nv shim
+	async getActiveXDisplays() {
+		let result = await execPromise('for x in /tmp/.X11-unix/X*; do echo "${x#X}" | sed s/\\\\/tmp\\\\/.X11-unix\\\\/X//g; done');
+		
+		return result.stdout.split(`\n`).filter((i)=>(i!=''));
+	}
+
+	async getPrimaryActiveXDisplay() {
+		let display = -1;
+
+		if (typeof process.env.DISPLAY !== 'undefined') {
+			return process.env.DISPLAY.replace(`:`,``);
+		} else {
+			let displays = await this.getActiveXDisplays();
+
+			if (displays.length > 1) {
+				//*::TODO:: should allow override of display environ? should also push through if already set?
+				logger.log(`Found multiple X displays. This is not yet handled correctly! TODO..`).
+				process.exit(1);
+			} else 
+				if (displays[0] != '') display = displays[0];
+		}
+
+		return display;
+	}
+
+	async getNVGPUNumAndXDisplay(nv) {
+
+		try {
+			let display = await this.getPrimaryActiveXDisplay();
+
+			if (display == -1) {
+				logger.log(`Unable to find X display; this is required for changing NVIDIA settings.`).
+				process.exit(1);			
+			}
+			let result = await execPromise(`nvidia-settings -q [${nv.nvidia_smi_log.gpu.uuid}]/GpuUUID | grep Attribute`);
+			let [_1,_2,_3,_4,_5] = result.stdout.split(`:`);
+			let [xDisplay, $1] = _2.split(`[`);
+			let [gpuNum, $2] = _3.split(`]`);
+
+			return [gpuNum, xDisplay];
+		} catch (e) {
+			logger.log(e);
+			process.exit(1);
+		}
+	}
+
+	async getNVSMIQuery(fullpcidevice) {
+		let nvidiaQuery = await execPromise(`nvidia-smi -x -q --id=${fullpcidevice}`);
+		return JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
+	}
+
 	async updateNV(gpu) {
 		let fullpcidevice = this.GPUs[gpu].fullpcidevice;
-		let nvidiaQuery = await exec(`nvidia-smi -x -q --id=${fullpcidevice}`);		
+		let nvidiaQuery = await execPromise(`nvidia-smi -x -q --id=${fullpcidevice}`);		
 		this.GPUs[gpu].nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
 	}
 
@@ -1124,316 +1190,6 @@ class gpuManager {
 		return vdd;
 	}
 
-	async getFanMode(gpu) {
-		let mode = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				mode = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1_enable`, `utf8`)).trim();
-				switch(mode) {
-					case '1':
-						mode = "manual";
-					  break;
-					case '2':
-						mode = "automatic";
-					  break;
-				}
-			  break;
-		}
-		return mode;
-	}
-
-	async getFanSpeedPWM(gpu) {
-		let pwm = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				pwm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim();
-			  break;
-		}
-		return pwm;
-	}
-
-	async getFanSpeedPct(gpu) {
-		let pct = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				pct = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim();
-				pct = ((pct / 255) * 100).toFixed(1);
-			  break;
-			case 'nvidia':
-				pct = this.GPUs[gpu].nv.nvidia_smi_log.gpu.fan_speed;
-				pct = pct.substr(0,pct.length-2);
-			  break;
-		}
-		return pct;
-	}
-
-	async getFanSpeedRPM(gpu) {
-		let rpm = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_input`, `utf8`)).trim();
-				rpm = rpm.toLocaleString();
-			  break;
-		}
-		return rpm;
-	}
-
-	async getFanSpeedMinRPM(gpu) {
-		let rpm = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_min`, `utf8`)).trim();
-				rpm = rpm.toLocaleString();
-			  break;
-		}
-		return rpm;
-	}
-
-	async getFanSpeedMaxRPM(gpu) {
-		let rpm = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_max`, `utf8`)).trim();
-				rpm = rpm.toLocaleString();
-			  break;
-		}
-		return rpm;
-	}
-
-	async getFanSpeedTarget(gpu) {
-		let rpm = "unknown";
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_target`, `utf8`)).trim();
-				rpm = rpm.toLocaleString();
-			  break;
-		}
-		return rpm;
-	}
-
-	async getFanInfo(gpu) {
-		let fanInfo = {
-			percent: 'unknown',
-			rpm: 'unknown',
-			rpm_max: 'unknown',
-			rpm_min: 'unknown',
-			mode: 'unknown'
-		};
-
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				fanInfo.mode = await this.getFanMode(gpu);
-				fanInfo.percent = await this.getFanSpeedPct(gpu);
-				fanInfo.rpm = await this.getFanSpeedRPM(gpu);
-				fanInfo.rpm_min = await this.getFanSpeedMinRPM(gpu);
-				fanInfo.rpm_max = await this.getFanSpeedMaxRPM(gpu);
-				fanInfo.target = await this.getFanSpeedTarget(gpu);
-			  break;
-			case 'nvidia':
-			    fanInfo.percent = await this.getFanSpeedPct(gpu);
-			  break;
-		};
-		return fanInfo;
-	}
-
-	async setGPUFanSpeed(gpu, speed = 100) {
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				let mode = await this.getFanMode(gpu);
-				if (mode == 'automatic') await this.setGPUFanMode(gpu, 'manual');
-
-				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`;
-				let pwm = parseInt((speed / 100) * 255);
-
-				try {
-					logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
-					await fsp.writeFile(file, pwm.toString());
-				} catch (e) {
-					logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
-					switch (e.code) {
-						case "EACCES":
-							logger.log(`--> Access was denied! root is required for most changing settings`);
-						  break;
-						case "ENOENT":
-							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-						  break;
-						default:
-							logger.log(`--> Some other error occured trying to write to [${file}]`);
-					}
-				}
-				logger.log(`[amd] Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
-			  break;
-			case 'nvidia':
-				logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
-			  break;
-			case 'intel':
-				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
-			  break;
-		}
-	}
-
-	async setGPUFanMode(gpu, mode = "automatic") {
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1_enable`;
-				switch(mode) {
-					case 'manual':
-						try {
-							fsp.writeFile(file, `1`);
-						} catch (e) {
-							logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
-							switch (e.code) {
-								case "EACCES":
-									logger.log(`--> Access was denied! root is required for most changing settings`);
-								  break;
-								case "ENOENT":
-									logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-								  break;
-								default:
-									logger.log(`--> Some other error occured trying to write to [${file}]`);
-							}
-						}
-						logger.log(`[amd] Fan mode for GPU${gpu} changed to: manual`);
-					  break;
-					case 'automatic':
-					default:
-						try {
-							fsp.writeFile(file, `2`);
-						} catch (e) {
-							logger.log(`[amd] Error setting fan mode for GPU${gpu}: ${e}`)
-							switch (e.code) {
-								case "EACCES":
-									logger.log(`--> Access was denied! root is required for most changing settings`);
-								  break;
-								case "ENOENT":
-									logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-								  break;
-								default:
-									logger.log(`--> Some other error occured trying to write to [${file}]`);
-							}
-						}
-						logger.log(`[amd] Fan mode for GPU${gpu} changed to: automatic`);
-				}
-			  break;
-			case 'nvidia':
-				logger.log(`[nvidia] NVIDIA fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
-			  break;
-			case 'intel':
-				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
-			  break;
-		}
-	}
-
-	async resetGPUPower(gpu) {
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
-				try {
-					logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
-					fsp.writeFile(file, `0`);
-				} catch (e) {
-					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
-					switch (e.code) {
-						case "EACCES":
-							logger.log(`--> Access was denied! root is required for most changing settings`);
-						  break;
-						case "ENOENT":
-							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-						  break;
-						default:
-							logger.log(`--> Some other error occured trying to write to [${file}]`);
-					}
-				}
-				var power = await this.getPowerLimitWatts(gpu);
-				logger.log(`[amd] Power limit set to default (${power} watts) for GPU${gpu}`);
-			  break;
-			case 'nvidia':
-				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
-				var power = this.GPUs[gpu].nv.nvidia_smi_log.gpu.power_readings.default_power_limit;
-				power = power.substr(0,power.length-2);
-
-				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
-					await exec(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
-					await this.updateNV(gpu);
-				}
-
-				await exec(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				logger.log(`[nvidia] Power limit set to default (${power} watts) for GPU${gpu}`);
-				await this.updateNV(gpu);
-
-				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode == "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
-					await exec(`nvidia-smi -pm 0 --id=${fullpcidevice}`);
-				}
-
-			  break;
-			case 'intel':
-				logger.log(`[intel] Intel power control not yet implemented, unable to reset GPU${gpu} power limit`);
-			  break;
-		}		
-	}
-
-	async setGPUPower(gpu, power) {
-		let max = await this.getPowerLimitMaxWatts(gpu);
-		let min = await this.getPowerLimitMinWatts(gpu);
-
-		if (
-			(this.GPUs[gpu].vendorName == "amd"
-		|| this.GPUs[gpu].vendorName == "nvidia")
-		&& process.getuid() != 0) {
-			//*::DEVELOPMENT::*::TODO:: - root not required for nvidia-settings and is probably not wanted!
-			//*::DEVELOPMENT::*::TODO:: - nvidia-settings requires the user from which X is run's permissions..?
-			//*::DEVELOPMENT::*::TODO:: - however! it is required to use nvidia-smi to set values! confusing eh?
-			//*::DEVELOPMENT::*::TODO:: - it is required for amd sysfs, but, libdrm for amdgpu might be better
-			//*::DEVELOPMENT::*::TODO:: - for cmd line stuff, I suppose we could drop to sudo only w/needed
-			//*::DEVELOPMENT::*::TODO:: - but what about when on gui> ?? prefer to not run as root ..
-			logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
-			process.exit(1);
-		}
-		
-		if (power > max || power < min) {
-			logger.log(`Power limit ${power} is out of possible ranges for GPU${gpu}: ${min}-${max}`);
-			process.exit(1);
-		}
-
-		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				if (power == 0) { power = 1; }
-				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
-				try {
-					logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
-					await fsp.writeFile(file, (power * 1000 * 1000).toString());
-				} catch (e) {
-					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
-					switch (e.code) {
-						case "EACCES":
-							logger.log(`--> Access was denied! root is required for most changing settings`);
-						  break;
-						case "ENOENT":
-							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-						  break;
-						default:
-							logger.log(`--> Some other error occured trying to write to [${file}]`);
-					}
-				}
-				logger.log(`[amd] Power limit set to ${power} watts for GPU${gpu}`);
-			  break;
-			case 'nvidia':
-				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
-				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
-					await exec(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
-				}
-				await exec(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				logger.log(`[nvidia] Power limit set to ${power} watts for GPU${gpu}`);
-			  break;
-			case 'intel':
-				logger.log(`[intel] Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`);
-			  break;
-		}
-	}
-
 	async getDriverVersion(gpu) {
 		let ver = "unknown";
 		switch (this.GPUs[gpu].vendorName) {
@@ -1587,6 +1343,385 @@ class gpuManager {
 			logger.log(e);
 			this.showGPUDriversMessage();
 			process.exit(1);
+		}
+	}
+
+	async getFanSpeedPWM(gpu) {
+		let pwm = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				pwm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim();
+			  break;
+		}
+		return pwm;
+	}
+
+	async getFanSpeedPct(gpu) {
+		let pct = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				pct = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim();
+				pct = ((pct / 255) * 100).toFixed(1);
+			  break;
+			case 'nvidia':
+				pct = this.GPUs[gpu].nv.nvidia_smi_log.gpu.fan_speed;
+				pct = pct.substr(0,pct.length-2);
+			  break;
+		}
+		return pct;
+	}
+
+	async getFanSpeedRPM(gpu) {
+		let rpm = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_input`, `utf8`)).trim();
+				rpm = rpm.toLocaleString();
+			  break;
+		}
+		return rpm;
+	}
+
+	async getFanSpeedMinRPM(gpu) {
+		let rpm = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_min`, `utf8`)).trim();
+				rpm = rpm.toLocaleString();
+			  break;
+		}
+		return rpm;
+	}
+
+	async getFanSpeedMaxRPM(gpu) {
+		let rpm = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_max`, `utf8`)).trim();
+				rpm = rpm.toLocaleString();
+			  break;
+		}
+		return rpm;
+	}
+
+	async getFanSpeedTarget(gpu) {
+		let rpm = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				rpm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/fan1_target`, `utf8`)).trim();
+				rpm = rpm.toLocaleString();
+			  break;
+		}
+		return rpm;
+	}
+
+	async getFanInfo(gpu) {
+		let fanInfo = {
+			percent: 'unknown',
+			rpm: 'unknown',
+			rpm_max: 'unknown',
+			rpm_min: 'unknown',
+			mode: 'unknown'
+		};
+
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				fanInfo.mode = await this.getFanMode(gpu);
+				fanInfo.percent = await this.getFanSpeedPct(gpu);
+				fanInfo.rpm = await this.getFanSpeedRPM(gpu);
+				fanInfo.rpm_min = await this.getFanSpeedMinRPM(gpu);
+				fanInfo.rpm_max = await this.getFanSpeedMaxRPM(gpu);
+				fanInfo.target = await this.getFanSpeedTarget(gpu);
+			  break;
+			case 'nvidia':
+			    fanInfo.percent = await this.getFanSpeedPct(gpu);
+			  break;
+		};
+		return fanInfo;
+	}
+
+	async getFanMode(gpu) {
+		let mode = "unknown";
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				mode = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1_enable`, `utf8`)).trim();
+				switch(mode) {
+					case '1':
+						mode = "manual";
+					  break;
+					case '2':
+						mode = "automatic";
+					  break;
+				}
+			  break;
+			case 'nvidia':
+				try {
+					let result = await execPromise(`nvidia-settings -q [${this.GPUs[gpu].nv.nvidia_smi_log.gpu.uuid}]/GPUFanControlState | grep Attribute`);
+					let [_,__,___,mode] = result.stdout.trim().replace(`.`,``).split(`:`);
+
+					switch(mode.trim()) {
+						case '0':
+							mode = "automatic";
+						  break;				
+						case '1':
+							mode = "manual";
+						  break;
+					}
+				} catch (e) {
+					console.log('caught wtf')
+					logger.log(e)
+				}
+			  break;
+
+		}
+		return mode;
+	}
+
+	async sudo(cmd) {
+		let x = `sudo ${process.argv[0]} ${process.argv[1]} ${cmd}`;
+		logger.log(LOG_LEVEL_DEVELOPMENT, `Need su access - calling [${x}]`);
+		exec(x).stdout.pipe(process.stdout);
+	}
+
+	//*::TODO:: should we check if the fan is already set to the mode we're requesting? or should we just set it anyway if asked, even it it's likely a noop?
+	async setGPUFanMode(gpu, mode = "automatic") {
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1_enable`;
+
+				if (process.getuid() != 0) {
+					await this.sudo(`fan ${( (mode == "automatic") ? 'disable' : 'enable') } ${gpu}`);
+				} else {
+					switch(mode) {
+						case 'manual':
+							try {
+								fsp.writeFile(file, `1`);
+							} catch (e) {
+								logger.log(`[${this.GPUs[gpu].vendorName}] Error setting fan mode for GPU${gpu}: ${e}`)
+								switch (e.code) {
+									case "EACCES":
+										logger.log(`--> Access was denied! root is required for most changing settings`);
+									  break;
+									case "ENOENT":
+										logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+									  break;
+									default:
+										logger.log(`--> Some other error occured trying to write to [${file}]`);
+								}
+							}
+						  break;
+						case 'automatic':
+						default:
+							try {
+								fsp.writeFile(file, `2`);
+							} catch (e) {
+								logger.log(`[${this.GPUs[gpu].vendorName}] Error setting fan mode for GPU${gpu}: ${e}`)
+								switch (e.code) {
+									case "EACCES":
+										logger.log(`--> Access was denied! root is required for most changing settings`);
+									  break;
+									case "ENOENT":
+										logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+									  break;
+									default:
+										logger.log(`--> Some other error occured trying to write to [${file}]`);
+								}
+							}
+					}
+
+					logger.log(`[${this.GPUs[gpu].vendorName}] Fan mode for GPU${gpu} changed to: ${mode}`);
+				}
+			  break;
+			case 'nvidia':
+				let setMode = 0;
+				if (mode == "manual") setMode = 1;
+
+				try {
+					await execPromise(`nvidia-settings -a [${this.GPUs[gpu].nv.nvidia_smi_log.gpu.uuid}]/GPUFanControlState=${setMode}`);
+
+					logger.log(`[${this.GPUs[gpu].vendorName}] Fan mode for GPU${gpu} changed to: ${mode}`);
+				} catch (e) {
+					let lines = e.message.replace(/\n.*\n.*\n.*\n$/, '').trim().split(`\n`);
+					for (let line of lines) {
+						logger.log(line);
+						if (line == `Unable to init server: Could not connect: Connection refused`) {
+							logger.log(`This usually happens if the DISPLAY environment variable is not set correctly or if your user doesn't have correct authorization (don't run as root for NVIDIA!)`);
+							logger.log(`Please make sure the DISPLAY variable is set to the X11 display attached to GPU${gpu} and make sure you are running ${$me} as the same user as the display!`);
+						}
+					}
+				}
+			  break;
+			case 'intel':
+				logger.log(`[${this.GPUs[gpu].vendorName}] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
+			  break;
+		}
+	}
+
+	async setGPUFanSpeed(gpu, speed = 100) {
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd': {
+				let mode = await this.getFanMode(gpu);
+				if (mode == 'automatic') await this.setGPUFanMode(gpu, 'manual');
+
+				if (process.getuid() != 0) {
+					await this.sudo(`fan ${speed} ${gpu}`);
+				} else {
+					let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`;
+					let pwm = parseInt((speed / 100) * 255);
+
+					try {
+						logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
+						await fsp.writeFile(file, pwm.toString());
+					} catch (e) {
+						logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
+						switch (e.code) {
+							case "EACCES":
+								logger.log(`--> Access was denied! root is required for most changing settings`);
+							  break;
+							case "ENOENT":
+								logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+							  break;
+							default:
+								logger.log(`--> Some other error occured trying to write to [${file}]`);
+						}
+					}
+					logger.log(`[amd] Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
+				}
+			  break;
+			}
+			case 'nvidia': {
+				let mode = await this.getFanMode(gpu);
+				if (mode == 'automatic') await this.setGPUFanMode(gpu, 'manual');
+
+				try {
+					await execPromise(`nvidia-settings -a [${this.GPUs[gpu].nv.nvidia_smi_log.gpu.uuid}.fan]/GPUTargetFanSpeed=${speed}`);
+
+					logger.log(`[${this.GPUs[gpu].vendorName}] Fan speed for GPU${gpu} changed to: ${speed}%`);
+				} catch (e) {
+					let lines = e.message.replace(/\n.*\n.*\n.*\n$/, '').trim().split(`\n`);
+					for (let line of lines) {
+						logger.log(line);
+						if (line == `Unable to init server: Could not connect: Connection refused`) {
+							logger.log(`This usually happens if the DISPLAY environment variable is not set correctly or if your user doesn't have correct authorization (don't run as root for NVIDIA!)`);
+							logger.log(`Please make sure the DISPLAY variable is set to the X11 display attached to GPU${gpu} and make sure you are running ${$me} as the same user as the display!`);
+						}
+					}
+				}				
+			  break;
+			 }
+			case 'intel':
+				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
+			  break;
+		}
+	}
+
+	async resetGPUPower(gpu) {
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
+				try {
+					logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
+					fsp.writeFile(file, `0`);
+				} catch (e) {
+					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					switch (e.code) {
+						case "EACCES":
+							logger.log(`--> Access was denied! root is required for most changing settings`);
+						  break;
+						case "ENOENT":
+							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+						  break;
+						default:
+							logger.log(`--> Some other error occured trying to write to [${file}]`);
+					}
+				}
+				var power = await this.getPowerLimitWatts(gpu);
+				logger.log(`[amd] Power limit set to default (${power} watts) for GPU${gpu}`);
+			  break;
+			case 'nvidia':
+				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
+				var power = this.GPUs[gpu].nv.nvidia_smi_log.gpu.power_readings.default_power_limit;
+				power = power.substr(0,power.length-2);
+
+				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
+					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					await execPromise(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
+					await this.updateNV(gpu);
+				}
+
+				await execPromise(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
+				logger.log(`[nvidia] Power limit set to default (${power} watts) for GPU${gpu}`);
+				await this.updateNV(gpu);
+
+				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode == "Enabled") {
+					logger.log(`[nvidia] persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
+					await execPromise(`nvidia-smi -pm 0 --id=${fullpcidevice}`);
+				}
+
+			  break;
+			case 'intel':
+				logger.log(`[intel] Intel power control not yet implemented, unable to reset GPU${gpu} power limit`);
+			  break;
+		}		
+	}
+
+	async setGPUPower(gpu, power) {
+		let max = await this.getPowerLimitMaxWatts(gpu);
+		let min = await this.getPowerLimitMinWatts(gpu);
+
+		if (
+			(this.GPUs[gpu].vendorName == "amd"
+		|| this.GPUs[gpu].vendorName == "nvidia")
+		&& process.getuid() != 0) {
+			//*::DEVELOPMENT::*::TODO:: - root not required for nvidia-settings and is probably not wanted!
+			//*::DEVELOPMENT::*::TODO:: - nvidia-settings requires the user from which X is run's permissions..?
+			//*::DEVELOPMENT::*::TODO:: - however! it is required to use nvidia-smi to set values! confusing eh?
+			//*::DEVELOPMENT::*::TODO:: - it is required for amd sysfs, but, libdrm for amdgpu might be better
+			//*::DEVELOPMENT::*::TODO:: - for cmd line stuff, I suppose we could drop to sudo only w/needed
+			//*::DEVELOPMENT::*::TODO:: - but what about when on gui> ?? prefer to not run as root ..
+			logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
+			process.exit(1);
+		}
+		
+		if (power > max || power < min) {
+			logger.log(`Power limit ${power} is out of possible ranges for GPU${gpu}: ${min}-${max}`);
+			process.exit(1);
+		}
+
+		switch (this.GPUs[gpu].vendorName) {
+			case 'amd':
+				if (power == 0) { power = 1; }
+				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
+				try {
+					logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
+					await fsp.writeFile(file, (power * 1000 * 1000).toString());
+				} catch (e) {
+					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					switch (e.code) {
+						case "EACCES":
+							logger.log(`--> Access was denied! root is required for most changing settings`);
+						  break;
+						case "ENOENT":
+							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
+						  break;
+						default:
+							logger.log(`--> Some other error occured trying to write to [${file}]`);
+					}
+				}
+				logger.log(`[amd] Power limit set to ${power} watts for GPU${gpu}`);
+			  break;
+			case 'nvidia':
+				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
+				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
+					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					await execPromise(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
+				}
+				await execPromise(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
+				logger.log(`[nvidia] Power limit set to ${power} watts for GPU${gpu}`);
+			  break;
+			case 'intel':
+				logger.log(`[intel] Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`);
+			  break;
 		}
 	}
 

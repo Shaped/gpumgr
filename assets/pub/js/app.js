@@ -45,9 +45,7 @@ class gpumgrUI {
 	    csstheme_selector.addEventListener('change', this.handle_themeSelect.bind(this));
 	}
 
-	handle_themeSelect(ev) {
-		csstheme.href = `/css/${ev.target.value ?? 'default'}.css`;
-	}
+	handle_themeSelect(ev) { csstheme.href = `/css/${ev.target.value ?? 'default'}.css`; }
 
 	loadReactComponents() {
 		let ReactMainComponent = ReactDOM.render(

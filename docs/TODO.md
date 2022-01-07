@@ -23,6 +23,13 @@
 - other gpu stuff
   - nvml/libdrm stuff, default driver info?
   - root not needed/(wanted?) for nv-settings? bleh
+    - this prevents doing something like 'gpumgr.js fan enable all' with both vendors
+    - we could use sudo for amd stuff but then we have to exec all our ioctl writes instead of fileWrite()
+      - non-interactive (web interface) still has a problem unless sudo is pre-configured
+    - we could use setuid
+      - requires script to have setuid permissions?
+      - can we setuid like sudo? doesn't seem like it
+      - we could sudo ourself.
   - pursue intelk
 - add ability to change clocks and other features
   - is there *any* way to change NVIDIA clocks without X?
