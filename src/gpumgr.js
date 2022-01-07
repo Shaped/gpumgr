@@ -101,15 +101,7 @@ class gpuManager {
 			case '--usage'	:
 			case 'wtf'		:
 			case '-wtf'		:
-			case '--wtf'	:
-				global.ansi = require('./ansi.js')();
-				(typeof process.stdout.getColorDepth === 'function')
-				?
-					(process.stdout.getColorDepth() == 1
-					|| process.argv[process.argv.length-1] == '-g'
-					|| process.argv[process.argv.length-1] == '--no-colors')
-						? ansi.disableColor():null
-				: ansi.disableColor();
+			case '--wtf'	: this.detectLoadANSI();
 			}
 
 		switch (process.argv[2]) {
@@ -277,9 +269,20 @@ class gpuManager {
 				this.startDaemon();				
 			  break;
 			default:
+				this.detectLoadANSI();
 				console.log(`Command line argument not understood: '${process.argv[2]}'`);
 				this.showUsage();
 		}
+	}
+
+	detectLoadANSI() {
+		global.ansi = require('./ansi.js')();
+		(typeof process.stdout.getColorDepth === 'function')
+		? (process.stdout.getColorDepth() == 1
+			|| process.argv[process.argv.length-1] == '-g'
+			|| process.argv[process.argv.length-1] == '--no-colors')
+				? ansi.disableColor():null
+		: ansi.disableColor();
 	}
 
 	async handleGPUArgument(arg, cb) {
