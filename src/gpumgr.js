@@ -95,6 +95,8 @@ class gpuManager {
 		switch (process.argv[2]) {
 			case 'show' 	: //fallthrough
 			case 'fan' 		: //   .. 
+			case 'start' 	: //   .. 
+			case '__child' 	: //   .. 
 			case 'power' 	: //fallthrough
 			case 'list' 	: await this.enumerateGPUs(); }
 
@@ -132,9 +134,11 @@ class gpuManager {
 			case 'power'	: this.handlePower(); 			break;
 			case 'show'		: this.handleShowStatus(); 			break;
 			case 'list'		: this.handleListGPUs(); 				break;
-			case 'start'	: await this.forkOff(); process.exit();		break;
+			case 'start'	: await this.forkOff(); process.exit(0);	break;
 			case 'force'	:
 				switch (process.argv[3]) {
+					case 'nv-x'://fallthrough
+					case 'nv-xconfig'://fallthrough
 					case 'nv-headless'://fallthrough
 					case 'nvidia-headless':
 						try {
@@ -190,6 +194,8 @@ class gpuManager {
 							process.exit(1);
 						}
 					  break;
+					case 'coolbits'://fallthrough
+					case 'nv-cb'://fallthrough
 					case 'nv-coolbits'://fallthrough
 					case 'nvidia-coolbits':
 						if (typeof process.argv[4] !== 'undefined'
@@ -224,7 +230,7 @@ class gpuManager {
 								logger.log(`${$me} pingback failed, process will be killed. start it again manually. [${pid}]`);
 								await this.killPID(pid);
 								logger.log(`${$me} sent signal to stop daemon [${pid}]`);
-								process.exit();
+								process.exit(0);
 							}
 
 							logger.log(`${$me} attempting to stop daemon [${pid}]`);
@@ -234,9 +240,8 @@ class gpuManager {
 							logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
 						} catch (e) {
 							logger.log(`${$me} unable to find daemon`);
+							process.exit(1);
 						}
-						
-						process.exit();
 					  break;
 					case 'stop':
 						try {
@@ -244,14 +249,27 @@ class gpuManager {
 							logger.log(`${$me} attempting to kill daemon [${pid}]`);
 							process.kill(pid, "SIGTERM");
 							logger.log(`${$me} sent signal to stop daemon [${pid}]`);
-							process.exit();
+							process.exit(0);
 						} catch (e) {
 							logger.log(`${$me} unable to find daemon`);
-						}
-						
-						process.exit();
+							process.exit(1);
+						}					
 					  break;
 				}
+			  break;
+			case 'coolbits'://fallthrough
+			case 'nv-cb'://fallthrough
+			case 'nv-coolbits'://fallthrough
+			case 'nvidia-coolbits'://fallthrough
+			case 'nv-x'://fallthrough
+			case 'nv-xconfig'://fallthrough
+			case 'nv-headless'://fallthrough
+			case 'nvidia-headless':
+				let [_1, _2, ...args] = process.argv;
+				args = args.join(' ');
+				this.detectLoadANSI();
+				console.log(`This command requires the force argument to ensure you really mean it. (ie. ${$me} force ${args})\n`);
+				process.exit(1);
 			  break;
 			case 'restart':
 				try {
@@ -269,7 +287,7 @@ class gpuManager {
 					logger.log(`${$me} attempting to stop daemon [${pid}]`);
 					process.kill(pid, "SIGINT");
 					logger.log(`${$me} sent signal to stop daemon [${pid}]`);
-					process.exit();
+					process.exit(0);
 				} catch (e) {
 					logger.log(`${$me} unable to find daemon`);
 				}
@@ -283,13 +301,18 @@ class gpuManager {
 				this.detectLoadANSI();
 				console.log(`Command line argument not understood: '${process.argv[2]}'`);
 				this.showUsage();
+				process.exit(1);
 		}
 	}
 
 	async handleGPUArgument(arg, cb) {
-		let regexp = /,/g;
+		switch (arg.toLowerCase()) { case 'am': case 'a': case '1002': case '0x1002': arg = 'amd';    break;
+									 case 'nv': case 'n': case '10de': case '0x10de': arg = 'nvidia'; break;
+									 case 'in': case 'i': case '8086': case '0x8086': arg = 'intel';  break;
+									 case '*' : arg = 'all'; }
+
 		switch (arg) {
-			case 'all': case 'nv': case 'nvidia': case 'amd': case 'intel':
+			case 'all': case 'nvidia': case 'amd': case 'intel':
 				for (let cgpu of this.GPUs)
 					(arg == 'all')
 					? await cb(cgpu.gpu)
@@ -300,7 +323,7 @@ class gpuManager {
 			default:
 				let gpus = [];
 				if (typeof arg !== 'undefined') {
-					let matches = arg.split(regexp);
+					let matches = arg.split(/,/g);
 
 					(matches[0]=='' && matches[1]=='')
 					? ( logger.log(`Invalid value '${arg}' specified in GPU list.`), process.exit(1) ):null;
@@ -310,7 +333,7 @@ class gpuManager {
 						for (let match of matches) { i++;
 							if (!Number.isInteger(parseInt(match))) {
 								switch (match) {
-									case 'nv': case 'nvidia': case 'amd': case 'intel':
+									case 'nvidia': case 'amd': case 'intel':
 										for (let cgpu of this.GPUs)
 											if (cgpu.vendorName == match) 
 												gpus.push(cgpu.gpu);
@@ -414,12 +437,12 @@ class gpuManager {
 				logger.log("Caught SIGINT - cleaning up and exiting..");
 				if (this.fd7 != null) logger.log(util.inspect(this.fd7))
 				await this.stopDaemon();
-				process.exit();
+				process.exit(0);
 			  break;
 			case 'SIGTERM':
 				logger.log("Caught SIGTERM - cleaning up and exiting..");
 				await this.stopDaemon();
-				process.exit();
+				process.exit(0);
 			  break;
 			case 'SIGUSR1':
 				logger.log("Caught SIGUSR1 - opening oobipc..");
@@ -439,6 +462,12 @@ class gpuManager {
 	}
 
 	async startDaemon(restart = false) {
+		if (typeof this.GPUs[0] === 'undefined') {
+			logger.log(`No GPUs found! Unable to start service!`);
+			this.showGPUDriversMessage();
+			process.exit(1);
+		}
+
 		const webHandlerClass = require('./webHandler.js');
 
 		switch(process.argv[3]) {
@@ -448,6 +477,7 @@ class gpuManager {
 				let [_1,_2,_3,_4,...args] = process.argv;
 				for (let i=0;i<args.length;i++) {
 					switch (args[i]) {
+						case '7>&1':break;
 						case '-noweb'   :(cluster.isMaster)?logger.log(`Warning: -noweb should be --noweb; proceeding anyway.`):null;
 						case '--noweb'  : this.webDisabled = true; break;
 						case '-port'    : (cluster.isMaster)?logger.log(`Warning: -port should be --port; proceeding anyway.`):null;
@@ -495,7 +525,7 @@ class gpuManager {
 						default:
 							(!logger.stdout) ? logger.divertToFile() :null;
 							logger.log(`Invalid argument ${args[i]}`);
-							process.exit(1);
+							process.exit(1); //*::TODO:: we *may* not need to exit here..
 					}
 				}
 			  break;
@@ -517,25 +547,13 @@ class gpuManager {
 
 		try {
 			process.argv = process.argv.filter((el)=>{if (el != '7>&1') return el})
-			//*::TODO::Should we perhaps look for GPUs here and not start listening if we don't find any?
-			//*::TODO::I mean, if we don't find any, drivers are bad or there isn't any, user should
-			//*::TODO::have to reboot or reinstall drivers before it would work anyway..? Then we
-			//*::TODO::don't have to template for no/zero GPUs..?
 			if (this.webDisabled != true) await this.webHandler.startListening();
 
 			if (cluster.isMaster) {
-				logger.log(`${$me} ${$version} service started.`);				
-				// cluster master work can be performed here. threads should enum as needed but perhaps we can mespas gpu control here.
-				//this.fd7 = fs.createReadStream(null, {fd:5}).on('data',this.handleOOB.bind(this));
-				// so if I listen on the oob, I clear the buffer so I can't preload it with values
-				// and if it's not preloaded and i stall, force restart won't get a pingback and kill
-				// but if i preload it, then force restart will get it's pingback immediately as it's already
-				// there but then I can't do oobipc for anything else on this channel...
-				// work around, initially preload the values, don't listen
-				// if we get sigusr1, we will listen and load the values.
-				// that way, they should be there already. if not, wtf, we can try and ask
-				// if we're dead, then we're dead and we die, if not we can reply and get restarted
-				//console.log(util.inspect(this.fd7));
+				logger.divertToFile(); logger.logSync(`${$me} ${$version} daemon has been started.`); //to stdout
+				logger.divertToFile(); logger.logSync(`${$me} ${$version} service started.`);         //to logfile
+			
+				// cluster master work can be performed here. threads should enum as needed but we can mespas gpu control here.
 
 				let interval=5*1000;
 				fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`);
@@ -650,7 +668,7 @@ class gpuManager {
 
 	async sudo(cmd) {
 		let x = `sudo ${process.argv[0]} ${process.argv[1]} ${cmd}`;
-		logger.log(LOG_LEVEL_DEVELOPMENT, `Need su access - calling [${x}]`);
+		logger.logSync(LOG_LEVEL_DEVELOPMENT, `Need su access - calling [${x}]`);
 		exec(x).stdout.pipe(process.stdout);
 	}
 
@@ -660,7 +678,7 @@ class gpuManager {
 		try {
 			fs.statSync(`/tmp/gpumgr.pid`)
 			logger.divertToFile();
-			logger.log(`PID file exists; daemon is likely already running.`)
+			logger.logSync(`PID file exists; daemon is likely already running.`)
 		} catch (e) {
 			let [_,__,...args] = process.argv;
 			(typeof this.childProcess === 'undefined')
@@ -669,22 +687,22 @@ class gpuManager {
 				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
 				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)) : null;
 
-				logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
+				logger.logSync(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
 		}
 	}
 
 	// no async code here! not even with await, it will loop-back!
-	nothingLeftToDo(code) { logger.log(`${$me} daemon shutting down..`); }
+	nothingLeftToDo(code) { logger.logSync(`${$me} daemon shutting down..`); }
 
 	handleChildExit(code) {
 		try {
 			fs.unlinkSync(`/tmp/gpumgr.pid`);
 		} catch(e){}
 
-		if (!cluster?.worker)
-			logger.log(`${$me} daemon exiting.`);
-
-		process.exit();
+		if (!cluster?.worker) {
+			logger.divertToFile(); logger.logSync(`${$me} daemon has exited.`); //to stdout
+			logger.divertToFile(); logger.logSync(`${$me} service stopped.`);   //to logfile
+		}
 	}
 
 	getSystemInfo() {
@@ -1426,7 +1444,6 @@ class gpuManager {
 						  break;
 					}
 				} catch (e) {
-					console.log('caught wtf')
 					logger.log(e)
 				}
 			  break;
