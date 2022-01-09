@@ -240,6 +240,7 @@ class gpuManager {
 							logger.log(`${$me} attempting to start new daemon...`);
 							await this.forkOff(true);
 							logger.log(`${$me} ${$version} daemon has been force re-started [${this.childProcess.pid}]`);
+							process.exit(0);
 						} catch (e) {
 							logger.log(`${$me} unable to find daemon`);
 							process.exit(1);
@@ -297,7 +298,7 @@ class gpuManager {
 			case '__child':
 				process.on('beforeExit', this.nothingLeftToDo.bind(this));
 				process.on('exit', this.handleChildExit.bind(this));
-				this.startDaemon();				
+				this.startDaemon((process.argv[3]=='force'&&process.argv[4]=='restart'));
 			  break;
 			default:
 				this.detectLoadANSI();
@@ -533,9 +534,6 @@ class gpuManager {
 							}						
 						  break;
 						default:
-							(!logger.stdout) ? logger.divertToFile() :null;
-							logger.log(`Invalid argument ${args[i]}`);
-							process.exit(1); //*::TODO:: we *may* not need to exit here..
 					}
 				}
 			  break;
@@ -560,8 +558,9 @@ class gpuManager {
 			if (this.webDisabled != true) await this.webHandler.startListening();
 
 			if (cluster.isMaster) {
+				if (!restart) {
 				logger.divertToFile(); logger.logSync(`${$me} ${$version} daemon has been started.`); //to stdout
-				logger.divertToFile(); logger.logSync(`${$me} ${$version} service started.`);         //to logfile
+				logger.divertToFile(); } logger.logSync(`${$me} ${$version} service started.`);         //to logfile
 			
 				// cluster master work can be performed here. threads should enum as needed but we can mespas gpu control here.
 

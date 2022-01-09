@@ -185,6 +185,7 @@ class webHandler {
 
 	compileJSX(jsxfile) {
 		const babel = require('@babel/core');
+		const t = require('@babel/types');
 
 		let jsfile = jsxfile.replace('.jsx','.js');
 		logger.log(LOG_LEVEL_DEVELOPMENT,`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
@@ -208,16 +209,30 @@ class webHandler {
 		};
 
 		try {
-			let parsed = babel.transformFileSync(`../assets/scripts/jsx/${jsxfile}`, {
+			let jsxFile = fs.readFileSync(`../assets/scripts/jsx/${jsxfile}`);
+			let jsx = babel.template(jsxFile);
+			let ast = jsx({
+				include: t.stringLiteral("test")
+			})
+			//let parsed = babel.transformFileSync(`../assets/scripts/jsx/${jsxfile}`, {
+			let parsed = babel.transformSync(ast, {
 				targets: `defaults`,
 				sourceType: `unambiguous`,
 				sourceMaps: true,
 				sourceFileName: jsxfile,
 				sourceRoot: `/js/maps/`,
 				highlightCode: true,
-				presets: [[`@babel/preset-react`, {
-					throwIfNamespace: true 
-				}]],
+				presets: [
+					[`@babel/preset-react`, {
+							throwIfNamespace: true 
+						}
+					]
+				],
+				plugins: [
+					[`@babel/template`], {
+						include: 'test'
+					}
+				],
 				parserOpts,
 				generatorOpts
 			});
