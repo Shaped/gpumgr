@@ -309,10 +309,16 @@ class gpuManager {
 		switch (arg.toLowerCase()) { case 'am': case 'a': case '1002': case '0x1002': arg = 'amd';    break;
 									 case 'nv': case 'n': case '10de': case '0x10de': arg = 'nvidia'; break;
 									 case 'in': case 'i': case '8086': case '0x8086': arg = 'intel';  break;
-									 case '*' : arg = 'all'; }
+									 case '*' : default : arg = 'all'; }
 
 		switch (arg) {
-			case 'all': case 'nvidia': case 'amd': case 'intel':
+			case 'all':
+				let i=2; for (;i<process.argv.length;i++) if (process.argv[i] == arg) break;
+				switch (process.argv[i+1]) { case 'amd'   : case 'am': case 'a': case '1002': case '0x1002': arg = 'amd';    break;
+											 case 'nvidia': case 'nv': case 'n': case '10de': case '0x10de': arg = 'nvidia'; break;
+											 case 'intel' : case 'in': case 'i': case '8086': case '0x8086': arg = 'intel';  break;
+											 case '*'     : default  : arg = 'all'; }
+			case 'nvidia': case 'amd': case 'intel':
 				for (let cgpu of this.GPUs)
 					(arg == 'all')
 					? await cb(cgpu.gpu)
