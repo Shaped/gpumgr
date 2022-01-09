@@ -26,7 +26,8 @@ const performance = require('perf_hooks').performance;
 const execPromise = util.promisify(require('child_process').exec);
 const exec = require('child_process').exec;
 
-global.$cores = os.cpus().length;
+global.$cpus = os.cpus();
+global.$cores = global.$cpus.length;
 global.$me = path.basename(process.argv[1]);
 global.$version = `0.0.9-development`;
 global.$copyright = `(C) Shaped Technologies`;

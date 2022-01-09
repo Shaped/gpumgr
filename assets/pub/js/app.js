@@ -57,8 +57,18 @@ class gpumgrUI {
 			componentName: 'CardWrapper'
 		});
 
-		ReactMainComponent.state.children[0].ref.current.addChild({
+		let cardWrapper = ReactMainComponent.state.children[0].ref.current;
+
+		cardWrapper.addChild({
 			componentName: 'Card'
+		});
+
+		let card0 = cardWrapper.state.children[0].ref.current;
+		console.log(this.data)
+
+		card0.addChild({ 
+			componentName: 'GPUTable',
+			props: { GPUs: this.data }
 		})
 
 	    menu_dashboard.addEventListener('click', (ev)=>{

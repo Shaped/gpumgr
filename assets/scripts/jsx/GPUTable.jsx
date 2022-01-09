@@ -27,6 +27,7 @@ class CardWrapper extends React.Component {
 		this.state={children:[]};
 	}
 	addChild(child) {
+		console.log('cardWr:addch')
 		child.ref = React.createRef();
 		this.setState({
 		  children: [...this.state.children, child],
@@ -36,7 +37,8 @@ class CardWrapper extends React.Component {
 		let possibleChildren = { Card };
 		let children=[];
 		this.state.children.map((child,i) => {
-			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i}));
+			console.log({ref:child.ref, key:i, ...child.props});
+			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i, ...child.props}));
 		});
 		return (
 			<div className="cardWrapper">
@@ -52,19 +54,21 @@ class Card extends React.Component {
 		this.state={children:[]};
 	}	
 	addChild(child) {
-		child.ref=React.createRef();
+		let children=[];		console.log('card:addch')
+		child.ref = React.createRef();
+		console.log(child)
 		this.setState({
-		  children: [...this.state.children, child]
-		})
+		  children: [...this.state.children, child],
+		});
 	}	
 	render() {
+		let possibleChildren = { GPUTable };
 		let children=[];
 		this.state.children.map((child,i) => {
-			children.push(React.createElement(eval(child.componentName), {ref:child.ref, key:i}));
+			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i, ...child.props}));
 		});
 		return (
 			<div className="card">
-				I am a card
 				{children}
 			</div>
 			);
@@ -74,7 +78,6 @@ class Card extends React.Component {
 class ProductLogo extends React.Component {
 	constructor(props) {
 		super(props);
-
 	}
 
 	render() {
