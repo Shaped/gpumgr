@@ -309,8 +309,7 @@ class gpuManager {
 		switch (arg.toLowerCase()) { case 'am': case 'a': case '1002': case '0x1002': arg = 'amd';    break;
 									 case 'nv': case 'n': case '10de': case '0x10de': arg = 'nvidia'; break;
 									 case 'in': case 'i': case '8086': case '0x8086': arg = 'intel';  break;
-									 case '*' : default : arg = 'all'; }
-
+									 case '*' : arg = 'all'; }
 		switch (arg) {
 			case 'all':
 				let i=2; for (;i<process.argv.length;i++) if (process.argv[i] == arg) break;
@@ -1463,10 +1462,9 @@ class gpuManager {
 
 		if (typeof gpu === 'undefined'
 		|| gpu == ""
-		|| parseInt(gpu) == ""
-		|| parseInt(gpu) == "NaN"
-		|| typeof this.GPUs[gpu] === 'undefined') {
-			logger.log(`Invalid GPU specified - not falling back to GPU0 for commands that make changes.`);
+		|| (parseInt(gpu) === "" && gpu.length > 0)
+		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
+			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
 			process.exit(1);
 		}
 
@@ -1490,9 +1488,9 @@ class gpuManager {
 
 		if (typeof gpu === 'undefined'
 		|| gpu == ""
-		|| parseInt(gpu) == "" || parseInt(gpu) == "NaN"
-		|| typeof this.GPUs[gpu] === 'undefined') {
-			logger.log(`Invalid GPU specified - not falling back to GPU0 for commands that make changes.`);
+		|| (parseInt(gpu) === "" && gpu.length > 0)
+		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
+			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
 			process.exit(1);
 		}
 		
