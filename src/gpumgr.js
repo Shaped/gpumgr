@@ -9,7 +9,7 @@
 "use strict";
 
 global.fs = require('fs');
-global.fsp = require('fs').promises;
+global.fsp = require('fs').promises; //*::TODO:: do we really need fs and fsp?
 global.cluster = require('cluster');
 global.util = require('util');
 global.xmlParser = require('xml2json');
@@ -39,6 +39,8 @@ class gpuManager {
 		this.servicePort = 4242;
 		this.serviceThreads = -1;
 
+		this.webDisabled = false;
+
 		this.workerSubscriptions = [];
 
 		this.GPUs = [];
@@ -65,6 +67,16 @@ class gpuManager {
 		this.handleArguments();
 	}
 
+	detectLoadANSI() {
+		global.ansi = require('./ansi.js')();
+		(typeof process.stdout.getColorDepth === 'function')
+		? (process.stdout.getColorDepth() == 1
+			|| process.argv[process.argv.length-1] == '-g'
+			|| process.argv[process.argv.length-1] == '--no-colors')
+				? ansi.disableColor():null
+		: ansi.disableColor();
+	}
+
 	handleArgumentsEarly() {
 		switch (process.argv[2]) {
 			case 'start'	: logger.divertToFile(); break;
@@ -81,40 +93,40 @@ class gpuManager {
 			: logger.log(LOG_LEVEL_DEBUG, `${$me} ${$version} worker #${cluster.worker.id} starting..`):null;
 
 		switch (process.argv[2]) {
-			case 'show' 	:
-			case 'fan' 		:
-			case 'power' 	:
+			case 'show' 	: //fallthrough
+			case 'fan' 		: //   .. 
+			case 'power' 	: //fallthrough
 			case 'list' 	: await this.enumerateGPUs(); }
 
 		switch (process.argv[2]) {
-			case 'show' 	:
-			case 'fan'		:
-			case 'power'	:
-			case 'list'		:
-			case '?'		:
-			case '-g'		:
-			case '-h'		:
-			case '-?'		:
-			case 'help'		:
-			case '--help'	:
-			case 'usage'	:
-			case '--usage'	:
-			case 'wtf'		:
-			case '-wtf'		:
+			case 'show' 	://fallthrough
+			case 'fan'		://   .. 
+			case 'power'	://   .. 
+			case 'list'		://   .. 
+			case '?'		://   .. 
+			case '-g'		://   .. 
+			case '-h'		://   .. 
+			case '-?'		://   .. 
+			case 'help'		://   .. 
+			case '--help'	://   .. 
+			case 'usage'	://   .. 
+			case '--usage'	://   .. 
+			case 'wtf'		://   .. 
+			case '-wtf'		://fallthrough
 			case '--wtf'	: this.detectLoadANSI();
 			}
 
 		switch (process.argv[2]) {
-			case '?'		:
-			case '-g'		:
-			case '-h'		:
-			case '-?'		:
-			case 'help'		:
-			case '--help'	:
-			case 'usage'	:
-			case '--usage'	:
-			case '-wtf'		:
-			case '--wtf'	:
+			case '?'		://fallthrough
+			case '-g'		://   .. 
+			case '-h'		://   .. 
+			case '-?'		://   .. 
+			case 'help'		://   .. 
+			case '--help'	://   .. 
+			case 'usage'	://   .. 
+			case '--usage'	://   .. 
+			case '-wtf'		://   .. 
+			case '--wtf'	://fallthrough
 			case 'wtf'		: this.showUsage(); 	break;
 			case 'fan'		: this.handleFans(); 		break;
 			case 'power'	: this.handlePower(); 			break;
@@ -123,8 +135,8 @@ class gpuManager {
 			case 'start'	: await this.forkOff(); process.exit();		break;
 			case 'force'	:
 				switch (process.argv[3]) {
+					case 'nv-headless'://fallthrough
 					case 'nvidia-headless':
-					case 'nv-headless':
 						try {
 							await this.enumerateGPUs();
 
@@ -143,13 +155,12 @@ class gpuManager {
 								logger.log(`Searching for first NVIDIA GPU...`);
 								gpu = -1;
 
-								for (let cgpu of this.GPUs) {
+								for (let cgpu of this.GPUs)
 									if (cgpu.vendorName == 'nvidia') {
 										gpu = cgpu.gpu;
 										logger.log(`First 'nvidia' GPU found at GPU${gpu}!`);
 										break;
 									}
-								}							
 							}
 
 							if (gpu == -1) {
@@ -179,8 +190,8 @@ class gpuManager {
 							process.exit(1);
 						}
 					  break;
+					case 'nv-coolbits'://fallthrough
 					case 'nvidia-coolbits':
-					case 'nv-coolbits':
 						if (typeof process.argv[4] !== 'undefined'
 						&& !Number.isInteger(parseInt(process.argv[4]))) {
 							logger.log(`Invalid parameter: ${process.argv[4]}`);
@@ -275,20 +286,10 @@ class gpuManager {
 		}
 	}
 
-	detectLoadANSI() {
-		global.ansi = require('./ansi.js')();
-		(typeof process.stdout.getColorDepth === 'function')
-		? (process.stdout.getColorDepth() == 1
-			|| process.argv[process.argv.length-1] == '-g'
-			|| process.argv[process.argv.length-1] == '--no-colors')
-				? ansi.disableColor():null
-		: ansi.disableColor();
-	}
-
 	async handleGPUArgument(arg, cb) {
 		let regexp = /,/g;
 		switch (arg) {
-			case 'all': case 'nvidia': case 'amd': case 'intel':
+			case 'all': case 'nv': case 'nvidia': case 'amd': case 'intel':
 				for (let cgpu of this.GPUs)
 					(arg == 'all')
 					? await cb(cgpu.gpu)
@@ -309,7 +310,7 @@ class gpuManager {
 						for (let match of matches) { i++;
 							if (!Number.isInteger(parseInt(match))) {
 								switch (match) {
-									case 'nvidia': case 'amd': case 'intel':
+									case 'nv': case 'nvidia': case 'amd': case 'intel':
 										for (let cgpu of this.GPUs)
 											if (cgpu.vendorName == match) 
 												gpus.push(cgpu.gpu);
@@ -325,11 +326,14 @@ class gpuManager {
 							}
 						}
 					} else {
+						// convert binary since parseInt won't recognize string 0b00; only if they're literal :(
+						if (arg.substr(0,2) == '0b') { arg = parseInt(arg.substr(2,arg.length),2); }
 						if (!Number.isInteger(parseInt(arg))) {
 							logger.log(`Invalid value '${arg}' specified in GPU list.`);
 							process.exit(1);
 						} else {
-							gpus.push(arg);
+							logger.log(LOG_LEVEL_DEVELOPMENT, `pushing ${parseInt(arg)} ${arg} ${typeof arg} into GPU list`)
+							gpus.push(parseInt(arg));
 						}
 					}
 				} else {
@@ -353,6 +357,24 @@ class gpuManager {
 				}
 		}
 	}	
+
+	uncaughtExceptionHandler(err, origin) {
+		logger.log(`Unhandled Exception: ${err}`);
+		logger.log(`Exception Origin: ${util.inspect(origin)}`);
+	
+		logger.log(`Exiting!`);
+
+		process.exit(1);
+	}
+
+	unhandledRejectionHandler(err, origin) {
+		logger.log(`Unhandled Rejection: ${err}`);
+		logger.log(`Rejection Origin: ${util.inspect(origin)}`);
+	
+		logger.log(`Exiting!`);
+
+		process.exit(1);
+	}
 
 	async getChildPID() { return (fs.readFileSync(`/tmp/gpumgr.pid`, `utf8`)); }
 
@@ -384,24 +406,6 @@ class gpuManager {
 			}
 
 		});
-	}
-
-	uncaughtExceptionHandler(err, origin) {
-		logger.log(`Unhandled Exception: ${err}`);
-		logger.log(`Exception Origin: ${util.inspect(origin)}`);
-	
-		logger.log(`Exiting!`);
-
-		process.exit(1);
-	}
-
-	unhandledRejectionHandler(err, origin) {
-		logger.log(`Unhandled Rejection: ${err}`);
-		logger.log(`Rejection Origin: ${util.inspect(origin)}`);
-	
-		logger.log(`Exiting!`);
-
-		process.exit(1);
 	}
 
 	async handleSignal(signal) {
@@ -438,16 +442,16 @@ class gpuManager {
 		const webHandlerClass = require('./webHandler.js');
 
 		switch(process.argv[3]) {
-			case 'restart':
-			  break;
-			case 'force':
+			case 'restart': break;
+			case 'force': //falthrough
 			case 'start':
 				let [_1,_2,_3,_4,...args] = process.argv;
 				for (let i=0;i<args.length;i++) {
 					switch (args[i]) {
-						case '-port':
-							(cluster.isMaster)?logger.log(`Warning: -port should be --port; proceeding anyway.`):null;
-						case '--port':
+						case '-noweb'   :(cluster.isMaster)?logger.log(`Warning: -noweb should be --noweb; proceeding anyway.`):null;
+						case '--noweb'  : this.webDisabled = true; break;
+						case '-port'    : (cluster.isMaster)?logger.log(`Warning: -port should be --port; proceeding anyway.`):null;
+						case '--port'   :
 							if (args[i+1].substr(0,1) != '-'
 								&& Number.isInteger(parseInt(args[i+1]))
 								&& parseInt(args[i+1]) >= 1001
@@ -459,9 +463,8 @@ class gpuManager {
 								process.exit(1);								
 							}
 						  break;
-						case '-host':
-							(cluster.isMaster)?logger.log(`Warning: -host should be --host; proceeding anyway.`):null;
-						case '--host':
+						case '-host'    : (cluster.isMaster)?logger.log(`Warning: -host should be --host; proceeding anyway.`):null;
+						case '--host'   :
 							if (args[i+1].substr(0,1) != '-') {
 								let host = args.splice(i+1,1)[0];
 								this.serviceHost = host;
@@ -473,8 +476,7 @@ class gpuManager {
 								process.exit(1);								
 							}
 						  break;
-						case '-threads':
-							(cluster.isMaster)?logger.log(`Warning: -threads should be --threads; proceeding anyway.`):null;
+						case '-threads' : (cluster.isMaster)?logger.log(`Warning: -threads should be --threads; proceeding anyway.`):null;
 						case '--threads':
 							if (args[i+1].substr(0,1) != '-'
 								&& Number.isInteger(parseInt(args[i+1]))
@@ -491,10 +493,14 @@ class gpuManager {
 							}						
 						  break;
 						default:
+							(!logger.stdout) ? logger.divertToFile() :null;
+							logger.log(`Invalid argument ${args[i]}`);
+							process.exit(1);
 					}
 				}
 			  break;
 			default:
+				(!logger.stdout) ? logger.divertToFile() :null;
 				logger.log(`Invalid argument ${process.argv[3]}`);
 				process.exit(1);
 		}
@@ -515,7 +521,7 @@ class gpuManager {
 			//*::TODO::I mean, if we don't find any, drivers are bad or there isn't any, user should
 			//*::TODO::have to reboot or reinstall drivers before it would work anyway..? Then we
 			//*::TODO::don't have to template for no/zero GPUs..?
-			await this.webHandler.startListening();
+			if (this.webDisabled != true) await this.webHandler.startListening();
 
 			if (cluster.isMaster) {
 				logger.log(`${$me} ${$version} service started.`);				
@@ -602,6 +608,85 @@ class gpuManager {
 		}
 	}
 
+	queryOOB(pid) {
+		return new Promise((resolve,reject) => {
+			logger.log(`${$me} [${process.pid}] creating readstream for /proc/${pid}/fd/7`)
+			let oob = fs.createReadStream(`/proc/${pid}/fd/7`);
+			let resolved = false;
+
+			oob.on('data', (chunk) => {
+				logger.log(`${$me} received pingback from client ${pid} on oobipc`);
+				let [_,host,port,threads] = chunk.toString().split(':');
+				this.serviceHost = host;
+				this.servicePort = port;
+				this.serviceThreads = threads;
+				resolved = true;
+				resolve();
+			});
+
+			setTimeout(()=>{
+				if (resolved == false) {
+					logger.log(`${$me} didn't find a queued oobipc, will try to signal for one`);
+					process.kill(pid, 'SIGUSR1');
+					setTimeout(()=>{
+						fs.writeFileSync(`/proc/${pid}/fd/8`, `👌`);
+					},500);
+				}
+			},1000);
+
+			setTimeout(()=> reject(`Pingback Timeout!`) ,5000);
+		});
+	}
+
+	handleOOB(chunk) {
+		if (chunk.toString().substr(0,1) == "👌") {
+			logger.log(`${process.pid}: OOBIPC query received! Sending pingback.`);
+			
+			setTimeout(()=>fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`),50);
+
+			logger.log(`${process.pid}: Sent pingback!`);
+		}
+	}
+
+	async sudo(cmd) {
+		let x = `sudo ${process.argv[0]} ${process.argv[1]} ${cmd}`;
+		logger.log(LOG_LEVEL_DEVELOPMENT, `Need su access - calling [${x}]`);
+		exec(x).stdout.pipe(process.stdout);
+	}
+
+	async forkOff(forceRestart = false) {
+		global.child = require('child_process');
+
+		try {
+			fs.statSync(`/tmp/gpumgr.pid`)
+			logger.divertToFile();
+			logger.log(`PID file exists; daemon is likely already running.`)
+		} catch (e) {
+			let [_,__,...args] = process.argv;
+			(typeof this.childProcess === 'undefined')
+			?	((!forceRestart)
+				? this.childProcess = child.fork(__filename, ['__child', ...args, '7>&1'], { detached:true })
+				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
+				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)) : null;
+
+				logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
+		}
+	}
+
+	// no async code here! not even with await, it will loop-back!
+	nothingLeftToDo(code) { logger.log(`${$me} daemon shutting down..`); }
+
+	handleChildExit(code) {
+		try {
+			fs.unlinkSync(`/tmp/gpumgr.pid`);
+		} catch(e){}
+
+		if (!cluster?.worker)
+			logger.log(`${$me} daemon exiting.`);
+
+		process.exit();
+	}
+
 	getSystemInfo() {
 		return new Promise(async(resolve,reject) => {
 			try {
@@ -646,6 +731,18 @@ class gpuManager {
 			}
 		});
 	}
+
+	getPIDUsage(pids) {
+		return new Promise((resolve,reject) => {
+			pidusage(pids, function(err,stats) {
+				if (err) reject(err);
+				resolve(stats);
+			});
+		});
+	}
+
+	async handleListGPUs() { await this.handleGPUArgument(process.argv[3], this.listGPU.bind(this)); }
+	async handleShowStatus() { await this.handleGPUArgument(process.argv[3], this.showStatus.bind(this)); }
 
 	async enumerateGPUs() {
 		this.GPUs=[];
@@ -721,139 +818,6 @@ class gpuManager {
 		};
 	}
 
-	getPIDUsage(pids) {
-		return new Promise((resolve,reject) => {
-			pidusage(pids, function(err,stats) {
-				if (err) reject(err);
-				resolve(stats);
-			});
-		});
-	}
-
-	queryOOB(pid) {
-		return new Promise((resolve,reject) => {
-			logger.log(`${$me} [${process.pid}] creating readstream for /proc/${pid}/fd/7`)
-			let oob = fs.createReadStream(`/proc/${pid}/fd/7`);
-			let resolved = false;
-
-			oob.on('data', (chunk) => {
-				logger.log(`${$me} received pingback from client ${pid} on oobipc`);
-				let [_,host,port,threads] = chunk.toString().split(':');
-				this.serviceHost = host;
-				this.servicePort = port;
-				this.serviceThreads = threads;
-				resolved = true;
-				resolve();
-			});
-
-			setTimeout(()=>{
-				if (resolved == false) {
-					logger.log(`${$me} didn't find a queued oobipc, will try to signal for one`);
-					process.kill(pid, 'SIGUSR1');
-					setTimeout(()=>{
-						fs.writeFileSync(`/proc/${pid}/fd/8`, `👌`);
-					},500);
-				}
-			},1000);
-
-			setTimeout(()=> reject(`Pingback Timeout!`) ,5000);
-		});
-	}
-
-	handleOOB(chunk) {
-		if (chunk.toString().substr(0,1) == "👌") {
-			logger.log(`${process.pid}: OOBIPC query received! Sending pingback.`);
-			
-			setTimeout(()=>fs.writeFileSync(8, `😎:${this.serviceHost}:${this.servicePort}:${this.serviceThreads}`),50);
-
-			logger.log(`${process.pid}: Sent pingback!`);
-		}
-	}
-
-	async forkOff(forceRestart = false) {
-		global.child = require('child_process');
-
-		try {
-			fs.statSync(`/tmp/gpumgr.pid`)
-			logger.divertToFile();
-			logger.log(`PID file exists; daemon is likely already running.`)
-		} catch (e) {
-			let [_,__,...args] = process.argv;
-			(typeof this.childProcess === 'undefined')
-			?	((!forceRestart)
-				? this.childProcess = child.fork(__filename, ['__child', ...args, '7>&1'], { detached:true })
-				: this.childProcess = child.fork(__filename, ['__child', ...args, '--host', this.serviceHost, '--port', this.servicePort, '--threads', this.serviceThreads, '7>&1'], { detached:true }),
-				fs.writeFileSync(`/tmp/gpumgr.pid`, `${this.childProcess.pid}`)) : null;
-
-				logger.log(`${$me} ${$version} daemon started [${this.childProcess.pid}]`);
-		}
-	}
-
-	// no async code here! not even with await, it will loop-back!
-	nothingLeftToDo(code) { logger.log(`${$me} daemon shutting down..`); }
-
-	handleChildExit(code) {
-		try {
-			fs.unlinkSync(`/tmp/gpumgr.pid`);
-		} catch(e){}
-
-		if (!cluster?.worker)
-			logger.log(`${$me} daemon exiting.`);
-
-		process.exit();
-	}
-
-	async handleFans() {
-		let gpu = process.argv[4];
-		switch (process.argv[3]) {
-			case 'manual':
-			case 'enable':
-				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'manual'); });
-			  break;
-			case 'auto':
-			case 'automatic':
-			case 'disable':
-				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'automatic'); });
-			  break;
-			case 'curve':
-				/*::TODO::*/
-				logger.log(`fan curve mode not yet impemented`);
-			  break;
-			default:
-				let speed = process.argv[3];
-				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
-				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanSpeed(cgpu, speed); });
-		}
-	}
-
-	async handlePower() {
-		let gpu = process.argv[4];
-		let power = process.argv[3];
-
-		//we could potentially allow percentages if we calculate stuff
-		//ie 100% is max_power, 0% is min_power? but is 100% 'defaut' power or 'max'?
-		//something like afterburner shows 100% as default and max as like 115% or whatever, prob best
-		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
-		
-		if (power == "reset") {
-			this.handleGPUArgument(gpu, this.resetGPUPower.bind(this));
-		} else {
-			if (!Number.isInteger(parseInt(power))) {
-				logger.log(`Invalid power value: ${power}`);
-				process.exit(1);
-			} else {
-				power=parseInt(power);
-			}
-
-			await this.handleGPUArgument(gpu, async(cgpu) => {
-				this.setGPUPower(cgpu, power);
-			});
-		}
-	}
-
-	async handleListGPUs() { await this.handleGPUArgument(process.argv[3], this.listGPU.bind(this)); }
-	async handleShowStatus() { await this.handleGPUArgument(process.argv[3], this.showStatus.bind(this)); }
-
 	getAMDProductName(deviceId) {
 		let amdgpu_ids = require('./amdgpu_ids.js')();
 
@@ -913,12 +877,6 @@ class gpuManager {
 	async getNVSMIQuery(fullpcidevice) {
 		let nvidiaQuery = await execPromise(`nvidia-smi -x -q --id=${fullpcidevice}`);
 		return JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
-	}
-
-	async updateNV(gpu) {
-		let fullpcidevice = this.GPUs[gpu].fullpcidevice;
-		let nvidiaQuery = await execPromise(`nvidia-smi -x -q --id=${fullpcidevice}`);		
-		this.GPUs[gpu].nv = JSON.parse(xmlParser.toJson(nvidiaQuery.stdout));
 	}
 
 	async getHWMon(gpu) { return (fs.readdirSync(`/sys/class/drm/card${gpu}/device/hwmon`))[0]; }
@@ -1352,9 +1310,7 @@ class gpuManager {
 	async getFanSpeedPWM(gpu) {
 		let pwm = "unknown";
 		switch (this.GPUs[gpu].vendorName) {
-			case 'amd':
-				pwm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim();
-			  break;
+			case 'amd': pwm = (fs.readFileSync(`/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/pwm1`, `utf8`)).trim(); break;
 		}
 		return pwm;
 	}
@@ -1419,24 +1375,23 @@ class gpuManager {
 	}
 
 	async getFanInfo(gpu) {
-		let fanInfo = {
-			percent: 'unknown',
-			rpm: 'unknown',
-			rpm_max: 'unknown',
-			rpm_min: 'unknown',
-			mode: 'unknown'
-		};
+		let fanInfo = { percent: 'unknown',
+						rpm    : 'unknown',
+						rpm_max: 'unknown',
+						rpm_min: 'unknown',
+						mode   : 'unknown' };
 
 		switch (this.GPUs[gpu].vendorName) {
 			case 'amd':
-				fanInfo.mode = await this.getFanMode(gpu);
+				fanInfo.mode    = await this.getFanMode(gpu);
 				fanInfo.percent = await this.getFanSpeedPct(gpu);
-				fanInfo.rpm = await this.getFanSpeedRPM(gpu);
+				fanInfo.rpm     = await this.getFanSpeedRPM(gpu);
 				fanInfo.rpm_min = await this.getFanSpeedMinRPM(gpu);
 				fanInfo.rpm_max = await this.getFanSpeedMaxRPM(gpu);
-				fanInfo.target = await this.getFanSpeedTarget(gpu);
+				fanInfo.target  = await this.getFanSpeedTarget(gpu);
 			  break;
 			case 'nvidia':
+				fanInfo.mode    = await this.getFanMode(gpu);
 			    fanInfo.percent = await this.getFanSpeedPct(gpu);
 			  break;
 		};
@@ -1480,10 +1435,63 @@ class gpuManager {
 		return mode;
 	}
 
-	async sudo(cmd) {
-		let x = `sudo ${process.argv[0]} ${process.argv[1]} ${cmd}`;
-		logger.log(LOG_LEVEL_DEVELOPMENT, `Need su access - calling [${x}]`);
-		exec(x).stdout.pipe(process.stdout);
+	async handleFans() {
+		let gpu = process.argv[4];
+
+		if (typeof gpu === 'undefined'
+		|| gpu == ""
+		|| parseInt(gpu) == ""
+		|| parseInt(gpu) == "NaN"
+		|| typeof this.GPUs[gpu] === 'undefined') {
+			logger.log(`Invalid GPU specified - not falling back to GPU0 for commands that make changes.`);
+			process.exit(1);
+		}
+
+		switch (process.argv[3]) {
+			case 'manual'   : //fallthrough
+			case 'enable'   : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'manual'); }); break;
+			case 'auto'     : //fallthrough
+			case 'automatic': //fallthrough
+			case 'disable'  : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'automatic'); }); break;
+			case 'curve'    : /*::TODO::*/ logger.log(`fan curve mode not yet impemented`); break;
+			default         :
+				let speed = process.argv[3];
+				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
+				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanSpeed(cgpu, speed); });
+		}
+	}
+
+	async handlePower() {
+		let gpu = process.argv[4];
+		let power = process.argv[3];
+
+		if (typeof gpu === 'undefined'
+		|| gpu == ""
+		|| parseInt(gpu) == "" || parseInt(gpu) == "NaN"
+		|| typeof this.GPUs[gpu] === 'undefined') {
+			logger.log(`Invalid GPU specified - not falling back to GPU0 for commands that make changes.`);
+			process.exit(1);
+		}
+		
+		//we could potentially allow percentages if we calculate stuff
+		//ie 100% is max_power, 0% is min_power? but is 100% 'defaut' power or 'max'?
+		//something like afterburner shows 100% as default and max as like 115% or whatever, prob best
+		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
+		
+		if (power == "reset") {
+			this.handleGPUArgument(gpu, this.resetGPUPower.bind(this));
+		} else {
+			if (!Number.isInteger(parseInt(power))) {
+				logger.log(`Invalid power value: ${power}`);
+				process.exit(1);
+			} else {
+				power=parseInt(power);
+			}
+
+			await this.handleGPUArgument(gpu, async(cgpu) => {
+				this.setGPUPower(cgpu, power);
+			});
+		}
 	}
 
 	//*::TODO:: should we check if the fan is already set to the mode we're requesting? or should we just set it anyway if asked, even it it's likely a noop?
@@ -1502,32 +1510,22 @@ class gpuManager {
 							} catch (e) {
 								logger.log(`[${this.GPUs[gpu].vendorName}] Error setting fan mode for GPU${gpu}: ${e}`)
 								switch (e.code) {
-									case "EACCES":
-										logger.log(`--> Access was denied! root is required for most changing settings`);
-									  break;
-									case "ENOENT":
-										logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-									  break;
-									default:
-										logger.log(`--> Some other error occured trying to write to [${file}]`);
+									case "EACCES": logger.log(`--> Access was denied! root may required for changing some settings`); break;
+									case "ENOENT": logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`); break;
+									default      : logger.log(`--> An error occured trying to write to [${file}]`);
 								}
 							}
 						  break;
-						case 'automatic':
+						case 'automatic': //fallthough
 						default:
 							try {
 								fsp.writeFile(file, `2`);
 							} catch (e) {
 								logger.log(`[${this.GPUs[gpu].vendorName}] Error setting fan mode for GPU${gpu}: ${e}`)
 								switch (e.code) {
-									case "EACCES":
-										logger.log(`--> Access was denied! root is required for most changing settings`);
-									  break;
-									case "ENOENT":
-										logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-									  break;
-									default:
-										logger.log(`--> Some other error occured trying to write to [${file}]`);
+									case "EACCES": logger.log(`--> Access was denied! root may required for changing some settings`); break;
+									case "ENOENT": logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`); break;
+									default      : logger.log(`--> An error occured trying to write to [${file}]`);
 								}
 							}
 					}
@@ -1554,9 +1552,7 @@ class gpuManager {
 					}
 				}
 			  break;
-			case 'intel':
-				logger.log(`[${this.GPUs[gpu].vendorName}] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`);
-			  break;
+			case 'intel': logger.log(`[${this.GPUs[gpu].vendorName}] Intel fan control not yet implemented, unable to set GPU${gpu} to ${mode}`); break;
 		}
 	}
 
@@ -1573,22 +1569,17 @@ class gpuManager {
 					let pwm = parseInt((speed / 100) * 255);
 
 					try {
-						logger.log(`[amd] Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
+						logger.log(`${this.GPUs[gpu].vendorName} Setting fan speed for GPU${gpu} ${speed}% (${pwm}/255)`);
 						await fsp.writeFile(file, pwm.toString());
 					} catch (e) {
-						logger.log(`[amd] Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
+						logger.log(`${this.GPUs[gpu].vendorName} Error setting fan speed for GPU${gpu} ${speed}% (${pwm}/255): ${e}`)
 						switch (e.code) {
-							case "EACCES":
-								logger.log(`--> Access was denied! root is required for most changing settings`);
-							  break;
-							case "ENOENT":
-								logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-							  break;
-							default:
-								logger.log(`--> Some other error occured trying to write to [${file}]`);
+							case "EACCES": logger.log(`--> Access was denied! root may required for changing some settings`); break;
+							case "ENOENT": logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`); break;
+							default: logger.log(`--> An error occured trying to write to [${file}]`);
 						}
 					}
-					logger.log(`[amd] Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
+					logger.log(`${this.GPUs[gpu].vendorName} Fan speed set for GPU${gpu} ${speed}% (${pwm}/255)`);
 				}
 			  break;
 			}
@@ -1612,9 +1603,7 @@ class gpuManager {
 				}				
 			  break;
 			 }
-			case 'intel':
-				logger.log(`[intel] Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`);
-			  break;
+			case 'intel': logger.log(`${this.GPUs[gpu].vendorName} Intel fan control not yet implemented, unable to set GPU${gpu} to ${speed}%`); break;
 		}
 	}
 
@@ -1623,48 +1612,41 @@ class gpuManager {
 			case 'amd':
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
-					logger.log(`[amd] Resetting power limit for GPU${gpu} to default`);
+					logger.log(`${this.GPUs[gpu].vendorName} Resetting power limit for GPU${gpu} to default`);
 					fsp.writeFile(file, `0`);
 				} catch (e) {
-					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					logger.log(`${this.GPUs[gpu].vendorName} Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
-						case "EACCES":
-							logger.log(`--> Access was denied! root is required for most changing settings`);
-						  break;
-						case "ENOENT":
-							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-						  break;
-						default:
-							logger.log(`--> Some other error occured trying to write to [${file}]`);
+						case "EACCES": logger.log(`--> Access was denied! root may required for changing some settings`); break;
+						case "ENOENT": logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`); break;
+						default      : logger.log(`--> An error occured trying to write to [${file}]`);
 					}
 				}
 				var power = await this.getPowerLimitWatts(gpu);
-				logger.log(`[amd] Power limit set to default (${power} watts) for GPU${gpu}`);
+				logger.log(`${this.GPUs[gpu].vendorName} Power limit set to default (${power} watts) for GPU${gpu}`);
 			  break;
 			case 'nvidia':
 				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
 				var power = this.GPUs[gpu].nv.nvidia_smi_log.gpu.power_readings.default_power_limit;
 				power = power.substr(0,power.length-2);
 
+				//*::TODO:: Should this just disable persistence mode instead? Or, set default then disable?
+				//*::TODO:: Or, is setting default first essentially a no-op?
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					logger.log(`${this.GPUs[gpu].vendorName} persistence_mode will be enabled for setting power on NVIDIA GPUs`);
 					await execPromise(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
-					await this.updateNV(gpu);
 				}
 
 				await execPromise(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				logger.log(`[nvidia] Power limit set to default (${power} watts) for GPU${gpu}`);
-				await this.updateNV(gpu);
+				logger.log(`${this.GPUs[gpu].vendorName} Power limit set to default (${power} watts) for GPU${gpu}`);
 
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode == "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
+					logger.log(`${this.GPUs[gpu].vendorName} persistence_mode will be disabled after setting default power on NVIDIA GPUs`);
 					await execPromise(`nvidia-smi -pm 0 --id=${fullpcidevice}`);
 				}
 
 			  break;
-			case 'intel':
-				logger.log(`[intel] Intel power control not yet implemented, unable to reset GPU${gpu} power limit`);
-			  break;
+			case 'intel': logger.log(`${this.GPUs[gpu].vendorName} Intel power control not yet implemented, unable to reset GPU${gpu} power limit`); break;
 		}		
 	}
 
@@ -1682,8 +1664,11 @@ class gpuManager {
 			//*::DEVELOPMENT::*::TODO:: - it is required for amd sysfs, but, libdrm for amdgpu might be better
 			//*::DEVELOPMENT::*::TODO:: - for cmd line stuff, I suppose we could drop to sudo only w/needed
 			//*::DEVELOPMENT::*::TODO:: - but what about when on gui> ?? prefer to not run as root ..
-			logger.log(`root is currently required to set power values for AMD or NVIDIA GPUs`);
-			process.exit(1);
+			//logger.log(`root may currently required to set power values for AMD or NVIDIA GPUs`);
+			//*::DEVELOPMENT::*::TODO::
+			//*::DEVELOPMENT::*::TODO:: - sorta solution - spawn to sudo?
+			await this.sudo(`power ${power} ${gpu}`);
+			return;
 		}
 		
 		if (power > max || power < min) {
@@ -1696,35 +1681,28 @@ class gpuManager {
 				if (power == 0) { power = 1; }
 				let file = `/sys/class/drm/card${gpu}/device/hwmon/${this.GPUs[gpu].hwmon}/power1_cap`;
 				try {
-					logger.log(`[amd] Setting power limit for GPU${gpu} to ${power} watts`);
+					logger.log(`${this.GPUs[gpu].vendorName} Setting power limit for GPU${gpu} to ${power} watts`);
 					await fsp.writeFile(file, (power * 1000 * 1000).toString());
 				} catch (e) {
-					logger.log(`[amd] Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
+					logger.log(`${this.GPUs[gpu].vendorName} Error setting power limit of ${power} watts for GPU${gpu}: ${e}`)
 					switch (e.code) {
-						case "EACCES":
-							logger.log(`--> Access was denied! root is required for most changing settings`);
-						  break;
-						case "ENOENT":
-							logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`);
-						  break;
-						default:
-							logger.log(`--> Some other error occured trying to write to [${file}]`);
+						case "EACCES": logger.log(`--> Access was denied! root may required for changing some settings`); break;
+						case "ENOENT": logger.log(`--> For some reason the sysfs item doesn't exist! [${file}]`); break;
+						default      : logger.log(`--> An error occured trying to write to [${file}]`);
 					}
 				}
-				logger.log(`[amd] Power limit set to ${power} watts for GPU${gpu}`);
+				logger.log(`${this.GPUs[gpu].vendorName} Power limit set to ${power} watts for GPU${gpu}`);
 			  break;
 			case 'nvidia':
 				let fullpcidevice = this.GPUs[gpu].fullpcidevice;
 				if (this.GPUs[gpu].nv.nvidia_smi_log.gpu.persistence_mode != "Enabled") {
-					logger.log(`[nvidia] persistence_mode will be enabled for setting power on NVIDIA GPUs`);
+					logger.log(`${this.GPUs[gpu].vendorName} persistence_mode will be enabled for setting power on NVIDIA GPUs`);
 					await execPromise(`nvidia-smi -pm 1 --id=${fullpcidevice}`);
 				}
 				await execPromise(`nvidia-smi -pl ${power} --id=${fullpcidevice}`);			
-				logger.log(`[nvidia] Power limit set to ${power} watts for GPU${gpu}`);
+				logger.log(`${this.GPUs[gpu].vendorName} Power limit set to ${power} watts for GPU${gpu}`);
 			  break;
-			case 'intel':
-				logger.log(`[intel] Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`);
-			  break;
+			case 'intel': logger.log(`${this.GPUs[gpu].vendorName} Intel power control not yet implemented, unable to set GPU${gpu} to ${power} watts`); break;
 		}
 	}
 
@@ -1755,9 +1733,10 @@ ${ansi.BBW}Usage:${ansi.Reset}
 
   ${ansi.BBW}${$me} [command] ${ansi.FgBrBlue}<gpu>${ansi.Reset} ${ansi.Bright+ansi.FgBrYellow}<options>${ansi.Reset}
 
-  If ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} is omitted from any command, ${ansi.BBW}GPU0${ansi.Reset} is assumed.
-  `//${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be a comma separated list of GPU numbers. //*::TODO:: uhh don't think I ever did this..fix
-  +`
+  If ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} is omitted from non-changing commands, ${ansi.BBW}GPU 0${ansi.Reset} is assumed.
+
+  ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be a ${ansi.Bright+ansi.FgBrBlue}single GPU #${ansi.Reset} or a ${ansi.Bright+ansi.FgBrBlue}comma separated list of GPU #s
+
   ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.BBW}'all'${ansi.Reset} to affect ${ansi.BBW}ALL GPUs
   ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.TeamRed}'amd'${ansi.Reset} to affect all ${ansi.TeamRed}AMD GPUs
   ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset} can be set to ${ansi.TeamGreen}'nvidia'${ansi.Reset} to affect all ${ansi.TeamGreen}Nvidia GPUs
@@ -1767,8 +1746,7 @@ ${ansi.BBW}Usage:${ansi.Reset}
 
     help ${lightPipe} --help ${lightPipe} -h       Display this help message
     list ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}               List available GPUs and their GPU#
-    show ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}               Show detailed statistics for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
-    status ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}             Same as above
+    show ${lightPipe} status ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}      Show detailed statistics for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
     power ${ansi.Bright+ansi.FgBrYellow}[percent] ${ansi.FgBrBlue}<gpu>${ansi.Reset}   ${ansi.BBW}*${ansi.Reset}Set ${ansi.FgBrBlue}<gpu>${ansi.Reset}'s power target to <percent>
     power reset ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}       ${ansi.BBW}*${ansi.Reset}Reset default power limit for ${ansi.FgBrBlue}<gpu>${ansi.Reset}`
     +//recover ${ansi.Bright+ansi.FgBrBlue}<gpu>${ansi.Reset}           ${ansi.BBW}*${ansi.Reset}Try driver recovery mechanism for ${ansi.FgBrBlue}<gpu>${ansi.Reset}
@@ -1805,17 +1783,15 @@ ${ansi.BBW}Usage:${ansi.Reset}
 
     ${ansi.Bright+ansi.FgBrCyan}start${ansi.Reset}                    ${ansi.BBW}Starts the ${$me} background service${ansi.Reset}
 
+      --noweb                Disable the web interface; This will make the
+                             service work for fan curve/fan control only
+
       --port ${ansi.FgBrYellow}<number>${ansi.Reset}        Set which IPv4 port to listen on for
                              HTTP requests (eg. 1969, default is ${this.servicePort})
 
-      --wsport ${ansi.FgBrYellow}<number>${ansi.Reset}      Set which IPv4 port to listen on for
-                             WebSocket requests (eg. 1970, default is
-                             HTTP request port + 2, so the port would
-                             default to ${this.servicePort+2} if --port is not set)
-
-      --host ${ansi.FgBrYellow}<ip>${ansi.Reset}            Set which IPv4 host to listen on.
-                             (eg. 0.0.0.0 or 127.0.0.1, default is
-                             ${this.serviceHost})
+      --host ${ansi.FgBrYellow}<ip>${ansi.Reset}            Set which IPv4 host to listen on for
+                             HTTP requests (eg. 0.0.0.0 or 127.0.0.1,
+                             default is ${this.serviceHost})
 
       --threads ${ansi.FgBrYellow}<#>${ansi.Reset}          Number of worker processes for web service
                              (defaults to number of cores, up to 4, minimum
@@ -1828,7 +1804,7 @@ ${ansi.BBW}Examples:${ansi.Reset}
   ${$me} start --port 4200    Starts the daemon & webapp on port 4200
   ${$me} fan enable 0         Enable manual fan control for GPU0
   ${$me} fan disable all      Enable auto fan control for all GPUs
-  ${$me} fan 100% 0           Set GPU0 fan speed to 100%
+  ${$me} fan 100% 0,1         Set fan speed for GPU0 and GPU1 to 100%
 `;
 ///////////////////////////////////////////////////////////////////////////////
 
