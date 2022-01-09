@@ -772,7 +772,7 @@ class gpuManager {
 	async handleShowStatus() { await this.handleGPUArgument(process.argv[3], this.showStatus.bind(this)); }
 
 	async enumerateGPUs() {
-		this.GPUs=[];
+		this.GPUs=[]; //*::TODO:: detect if first run or not for logging? ie 'found' gpus vs 'refreshed'
 		logger.log(LOG_LEVEL_DEVELOPMENT, `Enumerating GPUs..`);
 		let entries = fs.readdirSync(`/sys/class/drm`);
 
@@ -811,6 +811,9 @@ class gpuManager {
 					vendorName = 'nvidia';
 					nv = await this.getNVSMIQuery(fullpcidevice);
 					productName = nv.nvidia_smi_log.gpu.product_name;
+					//*::TODO:: use DISPLAY env by default ? or detect ?
+					//*::TODO:: check if that DISPLAY points to GPU asked to modify? if checking that we are already detecting..?
+					//*::TODO:: but allowing specification is important?
 					//[nvgpu, nvx] = await this.getNVGPUNumAndXDisplay(nv);
 					//let prix = await this.getPrimaryActiveXDisplay();
 					//if (nvx != prix) logger.log(`The detected primary X display DISPLAY:${prix} does not seem to be attached to GPU${gpu} - ${nv.nvidia_smi_log.gpu.uuid} - this could result in issues trying to interact with NVIDIA GPUs.`);
