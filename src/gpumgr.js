@@ -366,7 +366,6 @@ class gpuManager {
 							logger.log(`Invalid value '${arg}' specified in GPU list.`);
 							process.exit(1);
 						} else {
-							logger.log(LOG_LEVEL_DEVELOPMENT, `pushing ${parseInt(arg)} ${arg} ${typeof arg} into GPU list`)
 							gpus.push(parseInt(arg));
 						}
 					}
@@ -770,6 +769,64 @@ class gpuManager {
 
 	async handleListGPUs() { await this.handleGPUArgument(process.argv[3], this.listGPU.bind(this)); }
 	async handleShowStatus() { await this.handleGPUArgument(process.argv[3], this.showStatus.bind(this)); }
+
+	async handleFans() {
+		let gpu = process.argv[4];
+
+		if (typeof gpu === 'undefined'
+		|| gpu == ""
+		|| (parseInt(gpu) === "" && gpu.length > 0)
+		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
+			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
+			process.exit(1);
+		}
+
+		switch (process.argv[3]) {
+			case 'manual'   : //fallthrough
+			case 'enable'   : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'manual'); }); break;
+			case 'auto'     : //fallthrough
+			case 'automatic': //fallthrough
+			case 'disable'  : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'automatic'); }); break;
+			case 'curve'    : /*::TODO::*/ logger.log(`fan curve mode not yet impemented`); break;
+			default         :
+				let speed = process.argv[3];
+				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
+				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanSpeed(cgpu, speed); });
+		}
+	}
+
+	async handlePower() {
+		let gpu = process.argv[4];
+		let power = process.argv[3];
+
+		if (typeof gpu === 'undefined'
+		|| gpu == ""
+		|| (parseInt(gpu) === "" && gpu.length > 0)
+		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
+			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
+			process.exit(1);
+		}
+		
+		//we could potentially allow percentages if we calculate stuff
+		//ie 100% is max_power, 0% is min_power? but is 100% 'defaut' power or 'max'?
+		//something like afterburner shows 100% as default and max as like 115% or whatever, prob best
+		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
+		
+		if (power == "reset") {
+			this.handleGPUArgument(gpu, this.resetGPUPower.bind(this));
+		} else {
+			if (!Number.isInteger(parseInt(power))) {
+				logger.log(`Invalid power value: ${power}`);
+				process.exit(1);
+			} else {
+				power=parseInt(power);
+			}
+
+			await this.handleGPUArgument(gpu, async(cgpu) => {
+				this.setGPUPower(cgpu, power);
+			});
+		}
+	}
 
 	async enumerateGPUs() {
 		this.GPUs=[]; //*::TODO:: detect if first run or not for logging? ie 'found' gpus vs 'refreshed'
@@ -1445,9 +1502,11 @@ class gpuManager {
 			case 'nvidia':
 				try {
 					let result = await execPromise(`nvidia-settings -q [${this.GPUs[gpu].nv.nvidia_smi_log.gpu.uuid}]/GPUFanControlState | grep Attribute`);
-					let [_,__,___,mode] = result.stdout.trim().replace(`.`,``).split(`:`);
+					let [_,__,___,$$] = result.stdout.trim().replace(`.`,``).split(`:`);
 
-					switch(mode.trim()) {
+					mode = $$.trim().replace(` `, ``);
+
+					switch(mode) {
 						case '0':
 							mode = "automatic";
 						  break;				
@@ -1455,71 +1514,15 @@ class gpuManager {
 							mode = "manual";
 						  break;
 					}
+
 				} catch (e) {
 					logger.log(e)
 				}
 			  break;
 
 		}
+
 		return mode;
-	}
-
-	async handleFans() {
-		let gpu = process.argv[4];
-
-		if (typeof gpu === 'undefined'
-		|| gpu == ""
-		|| (parseInt(gpu) === "" && gpu.length > 0)
-		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
-			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
-			process.exit(1);
-		}
-
-		switch (process.argv[3]) {
-			case 'manual'   : //fallthrough
-			case 'enable'   : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'manual'); }); break;
-			case 'auto'     : //fallthrough
-			case 'automatic': //fallthrough
-			case 'disable'  : this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanMode(cgpu, 'automatic'); }); break;
-			case 'curve'    : /*::TODO::*/ logger.log(`fan curve mode not yet impemented`); break;
-			default         :
-				let speed = process.argv[3];
-				if (speed.substr(-1,1)=="%") speed=speed.substr(0,speed.length-1);
-				this.handleGPUArgument(gpu, async (cgpu) => { await this.setGPUFanSpeed(cgpu, speed); });
-		}
-	}
-
-	async handlePower() {
-		let gpu = process.argv[4];
-		let power = process.argv[3];
-
-		if (typeof gpu === 'undefined'
-		|| gpu == ""
-		|| (parseInt(gpu) === "" && gpu.length > 0)
-		|| (parseInt(gpu) && typeof this.GPUs[gpu] === 'undefined')) {
-			logger.log(`Invalid GPU ${gpu} specified - not falling back to GPU0 for commands that make changes.`);
-			process.exit(1);
-		}
-		
-		//we could potentially allow percentages if we calculate stuff
-		//ie 100% is max_power, 0% is min_power? but is 100% 'defaut' power or 'max'?
-		//something like afterburner shows 100% as default and max as like 115% or whatever, prob best
-		//if (power.substr(-1,1)=="%") power=power.substr(0,power.length-1);
-		
-		if (power == "reset") {
-			this.handleGPUArgument(gpu, this.resetGPUPower.bind(this));
-		} else {
-			if (!Number.isInteger(parseInt(power))) {
-				logger.log(`Invalid power value: ${power}`);
-				process.exit(1);
-			} else {
-				power=parseInt(power);
-			}
-
-			await this.handleGPUArgument(gpu, async(cgpu) => {
-				this.setGPUPower(cgpu, power);
-			});
-		}
 	}
 
 	//*::TODO:: should we check if the fan is already set to the mode we're requesting? or should we just set it anyway if asked, even it it's likely a noop?
@@ -1588,7 +1591,10 @@ class gpuManager {
 		switch (this.GPUs[gpu].vendorName) {
 			case 'amd': {
 				let mode = await this.getFanMode(gpu);
-				if (mode == 'automatic') await this.setGPUFanMode(gpu, 'manual');
+				if (mode == 'automatic') {
+					logger.log(`Fan mode is currently set to ${mode} for GPU${gpu} - setting fan control to manual.`);
+					await this.setGPUFanMode(gpu, 'manual');
+				}
 
 				if (process.getuid() != 0) {
 					await this.sudo(`fan ${speed} ${gpu}`);
@@ -1613,7 +1619,10 @@ class gpuManager {
 			}
 			case 'nvidia': {
 				let mode = await this.getFanMode(gpu);
-				if (mode == 'automatic') await this.setGPUFanMode(gpu, 'manual');
+				if (mode == 'automatic') {
+					logger.log(`Fan mode is currently set to ${mode} for GPU${gpu} - setting fan control to manual.`);
+					await this.setGPUFanMode(gpu, 'manual');
+				}
 
 				try {
 					await execPromise(`nvidia-settings -a [${this.GPUs[gpu].nv.nvidia_smi_log.gpu.uuid}.fan]/GPUTargetFanSpeed=${speed}`);

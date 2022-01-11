@@ -185,79 +185,104 @@ class webHandler {
 
 	compileJSX(jsxfile) {
 		const babel = require('@babel/core');
-		const t = require('@babel/types');
-
+		const self=this;
 		let jsfile = jsxfile.replace('.jsx','.js');
-		logger.log(LOG_LEVEL_DEVELOPMENT,`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
+		console.log(`JSX Cache Miss | Compiling scripts/jsx/${jsxfile} > cache/js/${jsfile}`);
 
 		let rendered = null;
 
-		//*::TODO::more babbling about babel babble: source maps wouldmight be nice.
-		//*::TODO::would caching asts be useful at all? methinks only with multifilecomplie
-		//*::TODO::should add an optional way of shoving regular jsx through babel w/some options or something?
 		let parserOpts = {
+//			plugins: ['jsx'],
+			preserveComments: true,
 			//errorRecovery: true, 	// don't throw immediately on errors, try to continue
-			attachComment: ((this.parent.developmentMode)?false:true), 	// remove comments before ast
+			attachComment: true, 	// attach comments or not
 			strictMode: true 			// always use strict mode
 		};
 
 		let generatorOpts = {
-			compact : (!this.parent.developmentMode), // whether to remove newlines/whitespace, 'auto' compacts if code.len>500k
-			minified: (!this.parent.developmentMode), // whether to minify the output
-			comment : (this.parent.developmentMode), // default for below
+			compact : false, // whether to remove newlines/whitespace, 'auto' compacts if code.len>500k
+			minified: false, // whether to minify the output
+			comment : false, // default for below
 			//shouldPrintComment: (comment)=>{}, // function for deciding whether to print comment..?
 		};
 
 		try {
-			let jsxFile = fs.readFileSync(`../assets/scripts/jsx/${jsxfile}`);
-			let jsx = babel.template(jsxFile);
-			let ast = jsx({
-				include: t.stringLiteral("test")
-			})
-			//let parsed = babel.transformFileSync(`../assets/scripts/jsx/${jsxfile}`, {
-			let parsed = babel.transformSync(ast, {
-				targets: `defaults`,
-				sourceType: `unambiguous`,
-				sourceMaps: true,
-				sourceFileName: jsxfile,
-				sourceRoot: `/js/maps/`,
-				highlightCode: true,
-				presets: [
-					[`@babel/preset-react`, {
-							throwIfNamespace: true 
-						}
-					]
-				],
-				plugins: [
-					[`@babel/template`], {
-						include: 'test'
-					}
-				],
-				parserOpts,
-				generatorOpts
-			});
+			const t = require("@babel/types");
 
-			let path = jsfile.split('/');
-			let reconstructedPath = '';
+			let transformer = function(jsxFilename) {
+				let jsxFile = fs.readFileSync(`../assets/scripts/jsx/${jsxFilename}`, `utf8`);
+				let ret = babel.transformSync(jsxFile, {
+					targets: `defaults`,
+					ast: true,
+					filenameRelative: `../assets/scripts/jsx/${jsxFilename}`,
+					sourceType: `unambiguous`,
+					sourceMaps: 'inline',
+					sourceFileName: `/js/${jsxFilename}`,
+					sourceRoot: `/js/maps/`,
+					highlightCode: true,
+					presets: [
+						[`@babel/preset-react`, {
+								throwIfNamespace: true 
+							}
+						]
+					],
+					plugins: [
+						{
+							visitor: {
+								CallExpression(path,state) {
+									if (path.node.callee.name == 'include') {
+										let included = transformer(path.node.arguments[0].value);
 
-			for (let i=0;i<path.length-1;i++) {
-				if (i!=path.length-1) {
-					reconstructedPath += path[i]+"/";
-					try {
-						fs.statSync(`../assets/cache/js/${reconstructedPath}`);
-					} catch(e) {
-						if (e.code == "ENOENT") {
-							logger.log(`Path ${reconstructedPath} not found in cache/js/ - creating!`);
-							fs.mkdirSync(`../assets/cache/js/${reconstructedPath}`);
-						} else {
-							logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
-							throw new Error(e);
+										// *::TODO:: uh. this. source map crap.
+/*										let sourceMapComment = babel.template.ast(`null;//# sourceMappingURL=/js/maps/${path.node.arguments[0].value}.map`,
+											{	preserveComments: true,
+												comments: true
+											});
+										included.ast.program.body.push(sourceMapComment);
+*/										
+										path.replaceWithMultiple(included.ast.program.body);
+									}
+								},
+								ImportDeclaration(path,state) {
+									// path.replaceWithMultiple(transformer(path.node.source.value).ast.program.body)
+								}
+							}
 						}
+					],
+					parserOpts,
+					generatorOpts
+				});
+
+				let path = jsxFilename.split('/');
+				let reconstructedPath = '';
+
+				for (let i=0;i<path.length-1;i++) {
+					if (i!=path.length-1) {
+						reconstructedPath += path[i]+"/";
+						try {
+							fs.statSync(`../assets/cache/js/maps/${reconstructedPath}`);
+						} catch(e) {
+							if (e.code == "ENOENT") {
+								logger.log(`Path ${reconstructedPath} not found in cache/js/maps/ - creating!`);
+								fs.mkdirSync(`../assets/cache/js/maps/${reconstructedPath}`);
+							} else {
+								logger.log(`Unexpected Error for ${reconstructedPath}: ${util.inspect(e)}`);
+								throw new Error(e);
+							}
+						}
+					} else {
+						reconstructedPath += path[i];
 					}
-				} else {
-					reconstructedPath += path[i];
 				}
+
+				logger.log('writing map')
+
+				fs.writeFileSync(`../assets/cache/js/maps/${jsxFilename}.map`, JSON.stringify(ret.map), `utf8`);
+
+				return ret;
 			}
+
+			let parsed = transformer(jsxfile);
 
 			rendered = parsed.code;
 
@@ -271,51 +296,61 @@ class webHandler {
 	}
 
 	handleJSRequest(req, res, next) {
+		//*::TODO:: So; like SCSS we have a caching problem; if the file including other files is cached; we don't know about those and won't update unless the includer has also been updated.
+		//*::TODO:: although, to check which files are included to check if they've beem modified we have to bascically parse/process anyway so, kind of invalidates teh cache..
+		//*::TODO:: the solution would be to store a cachashmap for any includes somehow beside the cached entity?
+		//*::TODO:: although truly this is mostly a developer convenience (even on ff) and a dev should be aware of this, but, would be more devconvenience if you don't need to worry.
+		//*::TODO:: also, make recursion check for cached files maybe, when we are on a miss..?
 		try {
 			logger.log(LOG_LEVEL_DEVELOPMENT, `JS Request received for ${req.params[0]}`);
 
-			let jsfile = req.params[0].replace('.jsx','.js');
-			let result = null;
-
-			if (req.params[0].substr(-4,4) == ".jsx") {
-				try {
-					var cache_stat = fs.statSync(`../assets/cache/js/${jsfile}`);
-				} catch (e) {
-					if (result == null && e.code == "ENOENT") {// js cached file doesn't exist, we need to render
-						result = this.compileJSX(req.params[0]);
-					} else if (result == null) throw new Error(`Unknown Error trying to read cache/js/${jsfile}: ${e}`);					
-				}
-
-				if (result == null) {
-					try {
-						var jsx_stat = fs.statSync(`../assets/scripts/jsx/${req.params[0]}`);
-					} catch (e) {
-						if (e.code == "ENOENT") { // JSX file doesn't exist?? we can try and push cached js if it exists, 
-							if (typeof cache_stat !== 'undefined') {
-								logger.log(LOG_LEVEL_PRODUCTION, `Warning: SCSS (scripts/jsx/${req.params[0]}) doesn't exist! Trying to fall back on cache (cache/js/${req.params[0]})`);
-								result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
-							} else throw new Error(`404 - ${req.params[0]}`);
-						} else throw new Error(`Unknown Error trying to read styles/jsx/${req.params[0]}: ${e}`);
-					}
-		
-					if (jsx_stat.mtimeMs > cache_stat.mtimeMs) {
-						result = this.compileJSX(req.params[0]);
-					} else {
-						logger.log(LOG_LEVEL_DEVELOPMENT, `JSX Cache Hit for ${req.params[0]}`);
-						result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
-					}
-				}
+			if (req.params[0].substr(-4,4) == ".map") {
+				res.type(`application/json`);
+				res.send(fs.readFileSync(`../assets/cache/js/${req.params[0]}`));
 			} else {
-				try {
-					result = fs.readFileSync(`../assets/pub/js/${req.params[0]}`);
-					logger.log(LOG_LEVEL_DEVELOPMENT, `Static JS file served for ${req.params[0]}`);
-				} catch (e) {
-					throw new Error(`404 - pub/js/${req.params[0]}: ${e}`);
-				}				
-			}
+				let jsfile = req.params[0].replace('.jsx','.js');
+				let result = null;
 
-			res.type(`text/javascript`);
-			res.send(`${result}`);
+				if (req.params[0].substr(-4,4) == ".jsx") {
+					try {
+						var cache_stat = fs.statSync(`../assets/cache/js/${jsfile}`);
+					} catch (e) {
+						if (result == null && e.code == "ENOENT") {// js cached file doesn't exist, we need to render
+							result = this.compileJSX(req.params[0]);
+						} else if (result == null) throw new Error(`Unknown Error trying to read cache/js/${jsfile}: ${e}`);					
+					}
+
+					if (result == null) {
+						try {
+							var jsx_stat = fs.statSync(`../assets/scripts/jsx/${req.params[0]}`);
+						} catch (e) {
+							if (e.code == "ENOENT") { // JSX file doesn't exist?? we can try and push cached js if it exists, 
+								if (typeof cache_stat !== 'undefined') {
+									logger.log(LOG_LEVEL_PRODUCTION, `Warning: SCSS (scripts/jsx/${req.params[0]}) doesn't exist! Trying to fall back on cache (cache/js/${req.params[0]})`);
+									result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
+								} else throw new Error(`404 - ${req.params[0]}`);
+							} else throw new Error(`Unknown Error trying to read styles/jsx/${req.params[0]}: ${e}`);
+						}
+			
+						if (jsx_stat.mtimeMs > cache_stat.mtimeMs) {
+							result = this.compileJSX(req.params[0]);
+						} else {
+							logger.log(LOG_LEVEL_DEVELOPMENT, `JSX Cache Hit for ${req.params[0]}`);
+							result = fs.readFileSync(`../assets/cache/js/${jsfile}`);
+						}
+					}
+				} else {
+					try {
+						result = fs.readFileSync(`../assets/pub/js/${req.params[0]}`);
+						logger.log(LOG_LEVEL_DEVELOPMENT, `Static JS file served for ${req.params[0]}`);
+					} catch (e) {
+						throw new Error(`404 - pub/js/${req.params[0]}: ${e}`);
+					}				
+				}
+
+				res.type(`text/javascript`);
+				res.send(`${result}`);
+			}
 		} catch (e) { //*::TODO::* catch say 500 if actually a 500...
 			logger.log(util.inspect(e));
 			res.type('text/html').status(404).send('404 Error');
