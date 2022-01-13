@@ -2,10 +2,12 @@ class CardWrapper extends React.Component {
 	constructor(props){
 		super(props);
 		this.state={children:[]};
+		console.log('cw')
+		console.log(props)
 	}
 	addChild(child) {
-		console.log('cardWr:addch')
 		child.ref = React.createRef();
+		child.props = this.props;
 		this.setState({
 		  children: [...this.state.children, child],
 		});
@@ -14,7 +16,8 @@ class CardWrapper extends React.Component {
 		let possibleChildren = { Card };
 		let children=[];
 		this.state.children.map((child,i) => {
-			console.log({ref:child.ref, key:i, ...child.props});
+			if (typeof possibleChildren[child.componentName] === 'undefined')
+				throw new Error("Component not whitelisted")
 			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i, ...child.props}));
 		});
 		return (

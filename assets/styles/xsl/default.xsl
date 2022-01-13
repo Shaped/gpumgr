@@ -31,7 +31,7 @@
 	<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 
-	<link id="csstheme" rel="stylesheet" type="text/css" href="css/default.css" />
+	<link id="csstheme" rel="stylesheet" type="text/css" href="css/default-dark.css" />
 
 	<title><xsl:value-of select="$pageTitle" /></title>
 
@@ -78,8 +78,8 @@
 			<select id="csstheme_selector">
 				<option disabled="disabled">Select Theme</option>
 				<option disabled="disabled">---</option>
+				<option value="default-dark" selected="selected">Default (dark)</option>
 				<option value="default">Default (light)</option>
-				<option value="default-dark">Default (dark)</option>
 			</select>
 		</div>
 		<p alt="This should be 127.0.0.1 unless you need to access gpumgr from a remote system!">Listening on http://<xsl:value-of select="$serviceHost" />:<xsl:value-of select="$servicePort" /></p>
@@ -100,7 +100,7 @@
 <main id="mainContentArea">
 	<div class="cardWrapper">
 		<div class="card wide" id="card-GPUTable">
-			<xsl:choose>
+			<!--<xsl:choose>
 				<xsl:when test="GPUs/*">
 					<h2>GPUs Found:</h2>
 					<table class="gpuTable">
@@ -109,9 +109,9 @@
 								<td>ID</td>
 								<td>Vendor</td>
 								<td>PCI Bus ID</td>
-								<td>VendorID:DeviceID</td>
-								<td>SubVendorID:SubDeviceID</td>
-								<td>Name</td>
+								<td>VendorID:DeviceID<br/>SubVendorID:SubDeviceID</td>
+								<td>Type</td>
+								<td>Device Name</td>
 							</tr>
 						</thead>
 						<tbody>
@@ -129,8 +129,8 @@
 										</xsl:choose>
 									</td>
 									<td><xsl:value-of select="gpu/@pcidevice" /></td>
-									<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /></td>
-									<td><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
+									<td><xsl:value-of select="gpu/@vendorid" />:<xsl:value-of select="gpu/@deviceid" /><br /><xsl:value-of select="gpu/@subvendorid" />:<xsl:value-of select="gpu/@subdeviceid" /></td>
+									<td></td>
 									<td><xsl:value-of select="gpu/@productName" /></td>
 								</tr>
 							</xsl:for-each>
@@ -142,12 +142,12 @@
 					<p>You can check the gpumgr log for hints, also check that your GPU drivers are correctly installed.</p>
 					<p>gpumgr shouldn't need special permission to list GPUs, however, it will need <em>root</em> access to modify any settings.</p>
 				</xsl:otherwise>
-			</xsl:choose>
+			</xsl:choose>-->Loading ...
 		</div>
 	</div>
 </main>
 <footer>
-	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr.js</a>&#0160;v<xsl:value-of select="$version" />&#0160;-&#0160;<a href="https://github.com/Shaped/">(C)&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped&#0160;Technologies</a></span>
+	<span><a href="https://github.com/Shaped/gpumgr/">gpumgr.js</a>&#0160;v<xsl:value-of select="$version" />&#0160;<a href="https://github.com/Shaped/">&#x24B8;&#0160;<xsl:value-of select="$currentYear" />&#0160;Shaped</a></span>
 </footer>
 </body>
 </html>

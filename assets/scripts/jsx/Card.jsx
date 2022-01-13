@@ -4,9 +4,8 @@ class Card extends React.Component {
 		this.state={children:[]};
 	}	
 	addChild(child) {
-		let children=[];		console.log('card:addch')
 		child.ref = React.createRef();
-		console.log(child)
+		child.props = this.props;		
 		this.setState({
 		  children: [...this.state.children, child],
 		});
@@ -15,6 +14,8 @@ class Card extends React.Component {
 		let possibleChildren = { GPUTable };
 		let children=[];
 		this.state.children.map((child,i) => {
+			if (typeof possibleChildren[child.componentName] === 'undefined')
+				throw new Error("Component not whitelisted")
 			children.push(React.createElement(possibleChildren[child.componentName], {ref:child.ref, key:i, ...child.props}));
 		});
 		return (

@@ -57,6 +57,7 @@ body {
 		"menu main" 
 		"footer footer";
 	transition: grid-template-columns 0.5s;
+	background-color: $background;
 }
 
 body.menuHidden {

@@ -1,4 +1,9 @@
 class GPUTable extends React.Component {
+	constructor(props) {
+		super(props);
+		this.sortableRef = React.createRef(); // pass this to sortable when mounted?
+	}
+
 	componentDidMount() {
 		window.dispatchEvent(
 			new CustomEvent('sortableComponentMounted',
@@ -6,7 +11,16 @@ class GPUTable extends React.Component {
 		);
 	}
 
+	componentDidUpdate() {
+		console.log("cDU()");
+			window.dispatchEvent(
+			new CustomEvent('sortableComponentMounted',
+				{ detail: { component: this.__proto__.constructor.name } })
+		);	
+	}
+
 	render() {
+		console.log('gputable render')
 		let NoGPUs = (<>
 				<h2>No GPUs were found!</h2>
 				<p>You can check the gpumgr log for hints, also check that your GPU drivers are correctly installed.</p>
@@ -15,22 +29,22 @@ class GPUTable extends React.Component {
 
 		let GPUTable = (<>
 			<h2>GPUs Found:</h2>
-			<table className="sortable gpuTable">
+			<table className="gpuTable" ref={this.sortableRef}>
 				<thead>
 					<tr>
 						<td>ID</td>
 						<td>Vendor</td>
 						<td>PCI Bus ID</td>
-						<td>VendorID:DeviceID</td>
-						<td>SubVendorID:SubDeviceID</td>
-						<td>Name</td>
+						<td>VendorID:DeviceID<br/>SubVendorID:SubDeviceID</td>
+						<td>Type</td>
+						<td>Device Name</td>
 					</tr>
 				</thead>
 				<tbody>
 					{Array.from(this.props.GPUs).map((gpu,i) => {
 						return (
 						<tr key={i}>
-							<td>{gpu.gpu}</td>
+							<td>{gpu.gpu} {gpu?.nv?.nvidia_smi_log?.gpu?.fan_speed}</td>
 							<td className="vendor">
 						      {(() => {
 						        if (gpu.vendorName != "unknown") {
@@ -41,9 +55,9 @@ class GPUTable extends React.Component {
 						      })()}							
 							</td>
 							<td>{gpu.pcidevice}</td>
-							<td>{gpu.vendorid}:{gpu.deviceid}</td>
-							<td>{gpu.subvendorid}:{gpu.subdeviceid}</td>
-							<td><ProductLogo ProductName={gpu.productName} />{gpu.productName}</td>
+							<td>{gpu.vendorid}:{gpu.deviceid}<br/>{gpu.subvendorid}:{gpu.subdeviceid}</td>
+							<td><ProductLogo ProductName={gpu.productName} /></td>
+							<td>{gpu.productName}</td>
 						</tr>
 						);
 					})}

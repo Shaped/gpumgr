@@ -24,8 +24,6 @@ class ProductLogo extends React.Component {
 			(v) => { if (v.type == type) return true; }
 		);
 
-		console.log(type);
-
 		if (type != null) {
 			return (<img className="productTypeImage" src={"/img/vendor/"+this.productImage.image} />);
 		} else {
