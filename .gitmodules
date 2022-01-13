@@ -1,3 +1,6 @@
 [submodule "src/nvc"]
 	path = src/nvc
 	url = git@github.com:Shaped/nvc.git
+[submodule "assets/pub/js/sortable"]
+	path = assets/pub/js/sortable
+	url = https://github.com/Shaped/sortable.git
